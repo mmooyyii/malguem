@@ -1,0 +1,23 @@
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal">
+
+    <!-- 左边的 WebView -->
+    <WebView
+        android:id="@+id/comicLeft"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginStart="40dp"
+        android:layout_marginEnd="40dp"
+        android:layout_weight="1" />
+
+    <!-- 右边的 WebView -->
+    <WebView
+        android:id="@+id/comicRight"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_marginStart="40dp"
+        android:layout_marginEnd="40dp"
+        android:layout_weight="1" />
+</LinearLayout>
