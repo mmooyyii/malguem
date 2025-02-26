@@ -83,6 +83,12 @@ public class ComicActivity extends AppCompatActivity {
     }
 
     public void show_epub_page(WebView view, int page) throws Exception {
+        if (page >= epub_book.total_pages()) {
+            view.scrollTo(0, 0);
+            view.loadDataWithBaseURL("file:///android_asset/", "", "text/html", "UTF-8", null);
+            view.setVisibility(android.view.View.VISIBLE);
+            return;
+        }
         String html;
         var data = epub_book.page(page);
         html = new String(data, "UTF-8");

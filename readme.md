@@ -1,13 +1,13 @@
 ## malguem
 
-epub reader for Android TV
+在Android TV上看epub格式的漫画和小说的app
 
-TODOLIST:
+只支持从webdav中获取epub资源. 推荐使用 https://alist.nn.ci/zh/ 来搭建webdav服务器
 
-1. epub流式解析
-2. 配置webdav界面
-3. 支持多个webdav源
-4. 支持其他的协议
-5. 美化界面
-6. 历史记录
-7. 选择漫画模式或者小说模式.
+malguem 有2种阅读模式, 可以在打开epub之前, 长按确认键切换,
+对于漫画, 会把整个屏幕分成左右2块, 尽量不产生滚动条, 完整地展示整页. 左右键翻页
+对于小说, 会用常规的html展示方式, 左右键切换章节, 上下键滚动.
+
+![](盾牌格挡.png)
+---
+这个项目基本都是靠ai写的, 我本人毫无前端/安卓/java开发经验, 代码中出现的bug, 线程安全, 规范等问题请多包涵.
