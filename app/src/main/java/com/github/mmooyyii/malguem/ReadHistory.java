@@ -6,5 +6,5 @@ public class ReadHistory {
 
     public int page_offset;
 
-    public ViewType view_type = ViewType.Comic;
+    public ListItem.ViewType view_type = ListItem.ViewType.Comic;
 }

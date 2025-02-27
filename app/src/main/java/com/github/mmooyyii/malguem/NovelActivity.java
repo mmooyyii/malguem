@@ -3,23 +3,30 @@ package com.github.mmooyyii.malguem;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.annotation.SuppressLint;
 import android.os.Bundle;
 
 import android.os.AsyncTask;
+import android.os.FileUtils;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.ViewGroup;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.OutputStream;
 
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.TextView;
 
 
 public class NovelActivity extends AppCompatActivity {
 
     private WebView novelView;
+    private TextView pageView;
     Epub epub_book;
     int epub_book_page;
     int resource_id;
@@ -33,6 +40,7 @@ public class NovelActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_novel);
+        pageView = findViewById(R.id.pageNumberTextView);
         novelView = findViewById(R.id.webView);
         var webSettings = novelView.getSettings();
         webSettings.setAllowFileAccess(true);
@@ -46,9 +54,6 @@ public class NovelActivity extends AppCompatActivity {
                 getIntent().getStringExtra("username"),
                 getIntent().getStringExtra("passwd")
         );
-
-        // 创建 AlertDialog 并设置自定义布局
-
         LayoutInflater inflater = LayoutInflater.from(this);
         var dialogView = inflater.inflate(R.layout.progress_bar, null);
 
@@ -69,6 +74,9 @@ public class NovelActivity extends AppCompatActivity {
         var db = Database.getInstance(this).getDatabase();
         db.save_history(resource_id, book_uri, epub_book_page, novelView.getScrollY());
         super.onDestroy();
+
+        android.os.Process.killProcess(android.os.Process.myPid());
+        System.exit(0);
     }
 
     public void show_epub_page(int page, int page_offset) {
@@ -97,6 +105,7 @@ public class NovelActivity extends AppCompatActivity {
         });
         novelView.scrollTo(0, page_offset);
         novelView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
+        pageView.setText((page + 1) + "/" + epub_book.total_pages());
     }
 
     @Override
@@ -134,7 +143,25 @@ public class NovelActivity extends AppCompatActivity {
         @Override
         protected Epub doInBackground(String... params) {
             try {
+                String key = DiskCache.generateKey(book_uri);
+                var diskCache = DiskCache.getInstance(NovelActivity.this).getCache();
+                var snapshot = diskCache.get(key);
+                if (snapshot != null) {
+                    try (var inputStream = snapshot.getInputStream(0)) {
+                        return new Epub(inputStream.readAllBytes());
+                    } finally {
+                        snapshot.close();
+                    }
+                }
                 var raw = client.open(book_uri);
+                var editor = diskCache.edit(key);
+                if (editor != null) {
+                    OutputStream outputStream = editor.newOutputStream(0);
+                    // 将下载的文件流写入输出流（如使用OkHttp或HttpURLConnection）
+                    FileUtils.copy(new ByteArrayInputStream(raw), outputStream);
+                    editor.commit(); // 提交写入
+                    outputStream.close();
+                }
                 return new Epub(raw);
             } catch (IOException e) {
                 return null;

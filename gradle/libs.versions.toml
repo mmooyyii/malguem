@@ -1,5 +1,6 @@
 [versions]
 agp = "8.8.0"
+disklrucache = "2.0.2"
 gson = "2.10.1"
 leanback = "1.0.0"
 glide = "4.11.0"
@@ -10,6 +11,7 @@ slf4jAndroid = "1.7.25"
 
 [libraries]
 androidx-leanback = { group = "androidx.leanback", name = "leanback", version.ref = "leanback" }
+disklrucache = { module = "com.jakewharton:disklrucache", version.ref = "disklrucache" }
 glide = { group = "com.github.bumptech.glide", name = "glide", version.ref = "glide" }
 gson = { module = "com.google.code.gson:gson", version.ref = "gson" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }

@@ -12,11 +12,10 @@ android {
 
     defaultConfig {
         applicationId = "com.github.mmooyyii.malguem"
-        minSdk = 21
+        minSdk = 33
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
-
     }
 
     buildTypes {
@@ -44,4 +43,6 @@ dependencies {
     implementation("io.documentnode:epub4j-core:4.2.1") {
         exclude(group = "xmlpull")
     }
+    implementation(libs.disklrucache)
+
 }

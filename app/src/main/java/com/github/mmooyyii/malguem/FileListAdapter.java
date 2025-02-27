@@ -10,7 +10,7 @@ import android.widget.TextView;
 import java.util.List;
 import java.util.Objects;
 
-public class FileListAdapter extends ArrayAdapter<File> {
+public class FileListAdapter extends ArrayAdapter<ListItem> {
 
     public FileListAdapter(Context context) {
         super(context, R.layout.list_item_file);
@@ -28,8 +28,8 @@ public class FileListAdapter extends ArrayAdapter<File> {
 
         TextView fileTypeTextView = convertView.findViewById(R.id.rightTextView);
         fileTypeTextView.setText("");
-        if (file.type == FileType.Epub) {
-            if (file.view_type == ViewType.Novel) {
+        if (file.type == ListItem.FileType.Epub) {
+            if (file.view_type == ListItem.ViewType.Novel) {
                 fileTypeTextView.setText("小说");
             } else {
                 fileTypeTextView.setText("漫画");

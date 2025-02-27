@@ -2,7 +2,11 @@ package com.github.mmooyyii.malguem;
 
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.FileUtils;
+import android.util.Log;
 import android.view.KeyEvent;
+import android.view.TextureView;
+import android.view.View;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
@@ -11,15 +15,22 @@ import android.webkit.WebViewClient;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.OutputStream;
+import java.util.Arrays;
 
 import android.view.LayoutInflater;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 
 public class ComicActivity extends AppCompatActivity {
 
     private WebView ComicViewLeft;
     private WebView ComicViewRight;
+
+    private TextView pageView;
     Epub epub_book;
     int epub_book_page;
     int resource_id;
@@ -34,6 +45,7 @@ public class ComicActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_comic);
+        pageView = findViewById(R.id.pageNumberTextView);
         ComicViewLeft = findViewById(R.id.comicLeft);
         ComicViewRight = findViewById(R.id.comicRight);
         var webSettings = ComicViewLeft.getSettings();
@@ -47,7 +59,24 @@ public class ComicActivity extends AppCompatActivity {
         webSettings.setAllowFileAccess(true);
         webSettings.setAllowContentAccess(true);
         webSettings.setUseWideViewPort(true);
-
+        // 监听左边 WebView 的滚动事件
+        ComicViewLeft.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
+            if (scrollY > oldScrollY) { // 向下滚动
+                var d1 = (double) ComicViewLeft.getContentHeight() * ComicViewLeft.getScale();
+                var d2 = ComicViewLeft.getHeight() + scrollY;
+                if (Math.abs(d1 - d2) <= 1) {
+                    ComicViewRight.requestFocus();
+                }
+            }
+        });
+        // 监听右边 WebView 的滚动事件
+        ComicViewRight.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
+            if (scrollY < oldScrollY) { // 向上滚动
+                if (scrollY == 0) {
+                    ComicViewLeft.requestFocus();
+                }
+            }
+        });
         var intent = getIntent();
         resource_id = intent.getIntExtra("resource_id", 1);
         book_uri = intent.getStringExtra("book_uri");
@@ -79,6 +108,9 @@ public class ComicActivity extends AppCompatActivity {
         var db = Database.getInstance(this).getDatabase();
         db.save_history(resource_id, book_uri, epub_book_page, 0);
         super.onDestroy();
+
+        android.os.Process.killProcess(android.os.Process.myPid());
+        System.exit(0);
     }
 
     public void show_epub_page(WebView view, int page) {
@@ -113,6 +145,7 @@ public class ComicActivity extends AppCompatActivity {
             }
         });
         view.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
+        pageView.setText((page + 1) + "/" + epub_book.total_pages());
     }
 
     @Override
@@ -156,7 +189,21 @@ public class ComicActivity extends AppCompatActivity {
         @Override
         protected Epub doInBackground(String... params) {
             try {
+                String key = DiskCache.generateKey(book_uri);
+                var diskCache = DiskCache.getInstance(ComicActivity.this).getCache();
+                var snapshot = diskCache.get(key);
+                if (snapshot != null) {
+                    var bytes = snapshot.getInputStream(0).readAllBytes();
+                    return new Epub(bytes);
+                }
                 var raw = client.open(book_uri);
+                var editor = diskCache.edit(key);
+                if (editor != null) {
+                    OutputStream outputStream = editor.newOutputStream(0);
+                    // 将下载的文件流写入输出流（如使用OkHttp或HttpURLConnection）
+                    FileUtils.copy(new ByteArrayInputStream(raw), outputStream);
+                    editor.commit(); // 提交写入
+                }
                 return new Epub(raw);
             } catch (IOException e) {
                 return null;

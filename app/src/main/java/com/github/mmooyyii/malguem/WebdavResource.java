@@ -49,8 +49,8 @@ public class WebdavResource implements ResourceInterface {
     }
 
     @Override
-    public List<File> ls(int resource_id, List<String> path) throws Exception {
-        var dirs = new ArrayList<File>();
+    public List<ListItem> ls(int resource_id, List<String> path) throws Exception {
+        var dirs = new ArrayList<ListItem>();
         Request request = new Request.Builder().url(make_dir_url(path))
                 .method("PROPFIND", null).addHeader("Depth", "1")
                 .addHeader("Authorization", Credentials.basic(_username, _password))
@@ -70,9 +70,9 @@ public class WebdavResource implements ResourceInterface {
                     content = url_decode(content);
                     var paths = content.split("/");
                     if (content.endsWith("/")) {
-                        dirs.add(new File(resource_id, paths[paths.length - 1], FileType.Dir));
+                        dirs.add(new ListItem(resource_id, paths[paths.length - 1], ListItem.FileType.Dir));
                     } else if (content.endsWith(".epub")) {
-                        dirs.add(new File(resource_id, paths[paths.length - 1], FileType.Epub));
+                        dirs.add(new ListItem(resource_id, paths[paths.length - 1], ListItem.FileType.Epub));
                     }
                 }
                 return dirs;

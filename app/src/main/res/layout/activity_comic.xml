@@ -1,23 +1,43 @@
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:orientation="horizontal">
+    android:layout_height="match_parent">
 
-    <!-- 左边的 WebView -->
-    <WebView
-        android:id="@+id/comicLeft"
-        android:layout_width="0dp"
+    <!-- 左右 WebView 的水平布局 -->
+    <LinearLayout
+        android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:layout_marginStart="40dp"
-        android:layout_marginEnd="40dp"
-        android:layout_weight="1" />
+        android:orientation="horizontal">
 
-    <!-- 右边的 WebView -->
-    <WebView
-        android:id="@+id/comicRight"
-        android:layout_width="0dp"
-        android:layout_height="match_parent"
-        android:layout_marginStart="40dp"
-        android:layout_marginEnd="40dp"
-        android:layout_weight="1" />
-</LinearLayout>
+        <!-- 左边的 WebView -->
+        <WebView
+            android:id="@+id/comicLeft"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="40dp"
+            android:layout_marginEnd="40dp"
+            android:layout_weight="1" />
+
+        <!-- 右边的 WebView -->
+        <WebView
+            android:id="@+id/comicRight"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="40dp"
+            android:layout_marginEnd="40dp"
+            android:layout_weight="1" />
+    </LinearLayout>
+
+    <!-- 用于显示页码的 TextView -->
+    <TextView
+        android:id="@+id/pageNumberTextView"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="16dp"
+        android:padding="8dp"
+        android:textSize="16sp"
+        android:background="@android:color/white"
+        android:alpha="0.8" />
+
+</FrameLayout>

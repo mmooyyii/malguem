@@ -1,6 +1,8 @@
 package com.github.mmooyyii.malguem;
 
+import android.content.Context;
 import android.content.Intent;
+import android.content.SharedPreferences;
 import android.os.Bundle;
 
 import android.app.AlertDialog;
@@ -14,8 +16,11 @@ import android.widget.ListView;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Properties;
 
 
 public class MainActivity extends AppCompatActivity {
@@ -32,6 +37,11 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         setup_file_list();
         pwd = new ArrayList<>();
+        try {
+            DiskCache.getInstance(MainActivity.this);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public void setup_file_list() {
@@ -41,9 +51,9 @@ public class MainActivity extends AppCompatActivity {
         fileListView.setOnItemLongClickListener((parent, view, position, id) -> {
             var file = fileListAdapter.getItem(position);
             assert file != null;
-            if (file.type == FileType.Resource && position != fileListAdapter.getCount() - 1) {
+            if (file.type == ListItem.FileType.Resource && position != fileListAdapter.getCount() - 1) {
                 showDeleteConfirmationDialog(file.id);
-            } else if (file.type == FileType.Epub) {
+            } else if (file.type == ListItem.FileType.Epub) {
                 var db = Database.getInstance(this).getDatabase();
                 db.switch_view_type(file.id, make_uri(file.name));
                 new FetchFileListTask().execute();
@@ -55,18 +65,31 @@ public class MainActivity extends AppCompatActivity {
             var file = fileListAdapter.getItem(position);
             assert file != null;
             switch (file.type) {
+                case ClearCache: {
+                    try {
+                        DiskCache.getInstance(MainActivity.this).getCache().delete();
+                        Toast.makeText(MainActivity.this, "清除成功", Toast.LENGTH_SHORT).show();
+                    } catch (IOException e) {
+                        Toast.makeText(MainActivity.this, "清除失败", Toast.LENGTH_SHORT).show();
+                    }
+                    break;
+                }
+                case SetCache: {
+                    showSetCacheDialog();
+                    break;
+                }
+                case AddWebDav: {
+                    showLoginDialog();
+                    break;
+                }
                 case Resource: {
-                    if (position == fileListAdapter.getCount() - 1) {
-                        showLoginDialog();
+                    var db = Database.getInstance(this).getDatabase();
+                    client = db.get_webdav(file.id);
+                    current_resource_id = file.id;
+                    if (client == null) {
+                        android.widget.Toast.makeText(MainActivity.this, "数据库异常", android.widget.Toast.LENGTH_LONG).show();
                     } else {
-                        var db = Database.getInstance(this).getDatabase();
-                        client = db.get_webdav(file.id);
-                        current_resource_id = file.id;
-                        if (client == null) {
-                            android.widget.Toast.makeText(MainActivity.this, "数据库异常", android.widget.Toast.LENGTH_LONG).show();
-                        } else {
-                            new FetchFileListTask().execute();
-                        }
+                        new FetchFileListTask().execute();
                     }
                     break;
                 }
@@ -79,7 +102,7 @@ public class MainActivity extends AppCompatActivity {
                     var db = Database.getInstance(this).getDatabase();
                     var type = db.get_epub_info(file.id, make_uri(file.name)).view_type;
                     Intent intent;
-                    if (type == ViewType.Comic) {
+                    if (type == ListItem.ViewType.Comic) {
                         intent = new Intent(MainActivity.this, ComicActivity.class);
                     } else {
                         intent = new Intent(MainActivity.this, NovelActivity.class);
@@ -142,25 +165,61 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setTitle("添加webdav")
                 .setView(dialogView)
-                .setPositiveButton("添加", new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        // 获取用户输入的用户名、密码和 URL
-                        String username = etUsername.getText().toString();
-                        String password = etPassword.getText().toString();
-                        String url = etUrl.getText().toString();
-                        var db = Database.getInstance(MainActivity.this).getDatabase();
-                        db.add_webdav(url, username, password);
-                        Toast.makeText(MainActivity.this, "添加成功", Toast.LENGTH_SHORT).show();
-                        init_resource_list();
+                .setPositiveButton("添加", (dialog, which) -> {
+                    // 获取用户输入的用户名、密码和 URL
+                    String username = etUsername.getText().toString();
+                    String password = etPassword.getText().toString();
+                    String url = etUrl.getText().toString();
+                    var db = Database.getInstance(MainActivity.this).getDatabase();
+                    db.add_webdav(url, username, password);
+                    Toast.makeText(MainActivity.this, "添加成功", Toast.LENGTH_SHORT).show();
+                    init_resource_list();
+                })
+                .setNegativeButton("取消", (dialog, which) -> {
+                    // 取消对话框
+                    dialog.dismiss();
+                });
+
+        // 创建并显示对话框
+        AlertDialog dialog = builder.create();
+        dialog.show();
+    }
+
+    private void showSetCacheDialog() {
+        // 获取布局填充器
+        LayoutInflater inflater = getLayoutInflater();
+        // 加载自定义布局
+        View dialogView = inflater.inflate(R.layout.dialog_setcache, null);
+        // 初始化输入框
+        final EditText cacheSize = dialogView.findViewById(R.id.cacheSize);
+        SharedPreferences sharedPref = this.getSharedPreferences("config", Context.MODE_PRIVATE);
+        int maxSize = sharedPref.getInt("max_local_cache_size", 5 * 1024);
+        var enable = sharedPref.getBoolean("enable_cache", true);
+        if (enable) {
+            cacheSize.setText(String.valueOf(maxSize));
+        } else {
+            cacheSize.setText("0");
+        }
+        // 创建 AlertDialog.Builder 对象
+        AlertDialog.Builder builder = new AlertDialog.Builder(this);
+        builder.setTitle("设置缓存大小")
+                .setView(dialogView)
+                .setPositiveButton("确认", (dialog, which) -> {
+                    try {
+                        SharedPreferences.Editor editor = sharedPref.edit();
+                        String size = cacheSize.getText().toString();
+                        var val = Integer.parseInt(size);
+                        editor.putInt("max_local_cache_size", val);
+                        editor.apply(); // 异步提交（推荐）
+                        DiskCache.getInstance(MainActivity.this).setMaxSize(val);
+                        Toast.makeText(MainActivity.this, "设置成功", Toast.LENGTH_SHORT).show();
+                    } catch (IOException e) {
+                        Toast.makeText(MainActivity.this, "设置失败", Toast.LENGTH_SHORT).show();
                     }
                 })
-                .setNegativeButton("取消", new DialogInterface.OnClickListener() {
-                    @Override
-                    public void onClick(DialogInterface dialog, int which) {
-                        // 取消对话框
-                        dialog.dismiss();
-                    }
+                .setNegativeButton("取消", (dialog, which) -> {
+                    // 取消对话框
+                    dialog.dismiss();
                 });
 
         // 创建并显示对话框
@@ -175,7 +234,9 @@ public class MainActivity extends AppCompatActivity {
         for (var file : db.resource_list()) {
             fileListAdapter.addAll(file);
         }
-        fileListAdapter.addAll(new File(0, "新增webdav", FileType.Resource));
+        fileListAdapter.addAll(new ListItem(0, "新增webdav", ListItem.FileType.AddWebDav));
+        fileListAdapter.addAll(new ListItem(0, "设置缓存", ListItem.FileType.SetCache));
+        fileListAdapter.addAll(new ListItem(0, "清除缓存", ListItem.FileType.ClearCache));
         fileListAdapter.notifyDataSetChanged();
     }
 
@@ -189,38 +250,40 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    private class FetchFileListTask extends AsyncTask<Void, Void, List<File>> {
+    private class FetchFileListTask extends AsyncTask<Void, Void, List<ListItem>> {
         @Override
-        protected List<File> doInBackground(Void... params) {
+        protected List<ListItem> doInBackground(Void... params) {
             try {
                 var files = client.ls(current_resource_id, pwd);
                 var epubs = new ArrayList<String>();
                 for (var file : files) {
-                    if (file.type == FileType.Epub) {
+                    if (file.type == ListItem.FileType.Epub) {
                         epubs.add(make_uri(file.name));
                     }
                 }
                 var db = Database.getInstance(MainActivity.this).getDatabase();
                 var map = db.get_view_types(current_resource_id, epubs);
                 for (var file : files) {
-                    if (file.type == FileType.Epub && map.containsKey(make_uri(file.name))) {
+                    if (file.type == ListItem.FileType.Epub && map.containsKey(make_uri(file.name))) {
                         file.view_type = map.get(make_uri(file.name));
                     }
                 }
                 return files;
             } catch (Exception e) {
-                throw new RuntimeException(e);
+                return null;
             }
         }
 
         @Override
-        protected void onPostExecute(List<File> fileList) {
+        protected void onPostExecute(List<ListItem> fileList) {
             if (fileList != null) {
                 fileListAdapter.clear();
                 for (var file : fileList) {
                     fileListAdapter.addAll(file);
                 }
                 fileListAdapter.notifyDataSetChanged();
+            } else {
+                Toast.makeText(MainActivity.this, "http请求失败", Toast.LENGTH_SHORT).show();
             }
         }
     }
