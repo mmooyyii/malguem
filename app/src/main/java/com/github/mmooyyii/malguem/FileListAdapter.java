@@ -27,6 +27,7 @@ public class FileListAdapter extends ArrayAdapter<File> {
         fileNameTextView.setText(file.name);
 
         TextView fileTypeTextView = convertView.findViewById(R.id.rightTextView);
+        fileTypeTextView.setText("");
         if (file.type == FileType.Epub) {
             if (file.view_type == ViewType.Novel) {
                 fileTypeTextView.setText("小说");
