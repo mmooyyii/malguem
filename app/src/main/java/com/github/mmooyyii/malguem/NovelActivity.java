@@ -3,6 +3,7 @@ package com.github.mmooyyii.malguem;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
+import android.annotation.SuppressLint;
 import android.os.Bundle;
 
 import android.os.AsyncTask;
@@ -15,11 +16,13 @@ import java.io.IOException;
 
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.TextView;
 
 
 public class NovelActivity extends AppCompatActivity {
 
     private WebView novelView;
+    private TextView pageView;
     Epub epub_book;
     int epub_book_page;
     int resource_id;
@@ -33,6 +36,7 @@ public class NovelActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_novel);
+        pageView = findViewById(R.id.pageNumberTextView);
         novelView = findViewById(R.id.webView);
         var webSettings = novelView.getSettings();
         webSettings.setAllowFileAccess(true);
@@ -97,6 +101,7 @@ public class NovelActivity extends AppCompatActivity {
         });
         novelView.scrollTo(0, page_offset);
         novelView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
+        pageView.setText((page + 1) + "/" + epub_book.total_pages());
     }
 
     @Override

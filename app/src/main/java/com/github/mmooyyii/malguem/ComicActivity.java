@@ -2,7 +2,10 @@ package com.github.mmooyyii.malguem;
 
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.KeyEvent;
+import android.view.TextureView;
+import android.view.View;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
@@ -14,12 +17,16 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.io.IOException;
 
 import android.view.LayoutInflater;
+import android.widget.LinearLayout;
+import android.widget.TextView;
 
 
 public class ComicActivity extends AppCompatActivity {
 
     private WebView ComicViewLeft;
     private WebView ComicViewRight;
+
+    private TextView pageView;
     Epub epub_book;
     int epub_book_page;
     int resource_id;
@@ -34,6 +41,7 @@ public class ComicActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_comic);
+        pageView = findViewById(R.id.pageNumberTextView);
         ComicViewLeft = findViewById(R.id.comicLeft);
         ComicViewRight = findViewById(R.id.comicRight);
         var webSettings = ComicViewLeft.getSettings();
@@ -47,7 +55,24 @@ public class ComicActivity extends AppCompatActivity {
         webSettings.setAllowFileAccess(true);
         webSettings.setAllowContentAccess(true);
         webSettings.setUseWideViewPort(true);
-
+        // 监听左边 WebView 的滚动事件
+        ComicViewLeft.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
+            if (scrollY > oldScrollY) { // 向下滚动
+                var d1 = (double) ComicViewLeft.getContentHeight() * ComicViewLeft.getScale();
+                var d2 = ComicViewLeft.getHeight() + scrollY;
+                if (Math.abs(d1 - d2) <= 1) {
+                    ComicViewRight.requestFocus();
+                }
+            }
+        });
+        // 监听右边 WebView 的滚动事件
+        ComicViewRight.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
+            if (scrollY < oldScrollY) { // 向上滚动
+                if (scrollY == 0) {
+                    ComicViewLeft.requestFocus();
+                }
+            }
+        });
         var intent = getIntent();
         resource_id = intent.getIntExtra("resource_id", 1);
         book_uri = intent.getStringExtra("book_uri");
@@ -113,6 +138,7 @@ public class ComicActivity extends AppCompatActivity {
             }
         });
         view.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
+        pageView.setText((page + 1) + "/" + epub_book.total_pages());
     }
 
     @Override
