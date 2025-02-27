@@ -3,9 +3,7 @@ package com.github.mmooyyii.malguem;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
-import android.content.Intent;
 import android.os.Bundle;
-
 
 import android.os.AsyncTask;
 import android.view.KeyEvent;
@@ -18,8 +16,6 @@ import java.io.IOException;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
-import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
 
 public class NovelActivity extends AppCompatActivity {
 
@@ -71,19 +67,12 @@ public class NovelActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         var db = Database.getInstance(this).getDatabase();
-        db.save_history(resource_id, book_uri, epub_book_page);
+        db.save_history(resource_id, book_uri, epub_book_page, novelView.getScrollY());
         super.onDestroy();
     }
 
-    public void show_epub_page(int page) {
-        String html;
-        try {
-            var data = epub_book.page(page);
-            html = new String(data, "UTF-8");
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
-        novelView.scrollTo(0, 0);
+    public void show_epub_page(int page, int page_offset) {
+        var html = epub_book.page(page);
         novelView.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -106,8 +95,8 @@ public class NovelActivity extends AppCompatActivity {
                 return super.shouldInterceptRequest(view, request);
             }
         });
+        novelView.scrollTo(0, page_offset);
         novelView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
-        novelView.setVisibility(android.view.View.VISIBLE);
     }
 
     @Override
@@ -119,13 +108,13 @@ public class NovelActivity extends AppCompatActivity {
                 case KeyEvent.KEYCODE_DPAD_LEFT:
                     if (epub_book_page > 0) {
                         epub_book_page -= 1;
-                        show_epub_page(epub_book_page);
+                        show_epub_page(epub_book_page, 0);
                     }
                     return true;
                 case KeyEvent.KEYCODE_DPAD_RIGHT:
                     if (epub_book_page + 1 < epub_book.total_pages()) {
                         epub_book_page += 1;
-                        show_epub_page(epub_book_page);
+                        show_epub_page(epub_book_page, 0);
                     }
                     return true;
             }
@@ -162,8 +151,9 @@ public class NovelActivity extends AppCompatActivity {
             var db = Database.getInstance(NovelActivity.this).getDatabase();
             var info = db.get_epub_info(resource_id, book_uri);
             epub_book = book;
-            epub_book_page = info.first;
-            show_epub_page(epub_book_page);
+            epub_book_page = info.current_page;
+
+            show_epub_page(epub_book_page, info.page_offset);
         }
     }
 }

@@ -1,6 +1,5 @@
 package com.github.mmooyyii.malguem;
 
-import android.content.Intent;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.view.KeyEvent;
@@ -78,20 +77,18 @@ public class ComicActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         var db = Database.getInstance(this).getDatabase();
-        db.save_history(resource_id, book_uri, epub_book_page);
+        db.save_history(resource_id, book_uri, epub_book_page, 0);
         super.onDestroy();
     }
 
-    public void show_epub_page(WebView view, int page) throws Exception {
+    public void show_epub_page(WebView view, int page) {
         if (page >= epub_book.total_pages()) {
             view.scrollTo(0, 0);
             view.loadDataWithBaseURL("file:///android_asset/", "", "text/html", "UTF-8", null);
             view.setVisibility(android.view.View.VISIBLE);
             return;
         }
-        String html;
-        var data = epub_book.page(page);
-        html = new String(data, "UTF-8");
+        var html = epub_book.page(page);
         view.scrollTo(0, 0);
         view.setWebViewClient(new WebViewClient() {
             @Override
@@ -116,7 +113,6 @@ public class ComicActivity extends AppCompatActivity {
             }
         });
         view.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
-        view.setVisibility(android.view.View.VISIBLE);
     }
 
     @Override
@@ -176,7 +172,7 @@ public class ComicActivity extends AppCompatActivity {
             }
             var db = Database.getInstance(ComicActivity.this).getDatabase();
             epub_book = book;
-            epub_book_page = db.get_epub_info(resource_id, book_uri).first;
+            epub_book_page = db.get_epub_info(resource_id, book_uri).current_page;
             try {
                 show_epub_page(ComicViewLeft, epub_book_page);
                 show_epub_page(ComicViewRight, epub_book_page + 1);

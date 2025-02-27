@@ -25,9 +25,13 @@ public class Epub {
         contents = book.getContents();
     }
 
-    public byte[] page(int page) throws IOException {
-        var data = contents.get(page).getData();
-        return data;
+    public String page(int page) {
+        try {
+            var bytes = contents.get(page).getData();
+            return new String(bytes, "UTF-8");
+        } catch (IOException e) {
+            return "无法读取页面";
+        }
     }
 
     public int total_pages() {

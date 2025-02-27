@@ -20,7 +20,6 @@ import java.util.List;
 
 public class MainActivity extends AppCompatActivity {
 
-    private ListView fileListView;
     private FileListAdapter fileListAdapter;
 
     WebdavResource client;
@@ -36,12 +35,13 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void setup_file_list() {
-        fileListView = findViewById(R.id.fileListView);
+        ListView fileListView = findViewById(R.id.fileListView);
         fileListAdapter = new FileListAdapter(this);
         fileListView.setAdapter(fileListAdapter);
         fileListView.setOnItemLongClickListener((parent, view, position, id) -> {
             var file = fileListAdapter.getItem(position);
-            if (file.type == FileType.Resource && position != 0) {
+            assert file != null;
+            if (file.type == FileType.Resource && position != fileListAdapter.getCount() - 1) {
                 showDeleteConfirmationDialog(file.id);
             } else if (file.type == FileType.Epub) {
                 var db = Database.getInstance(this).getDatabase();
@@ -53,9 +53,10 @@ public class MainActivity extends AppCompatActivity {
 
         fileListView.setOnItemClickListener((parent, view, position, id) -> {
             var file = fileListAdapter.getItem(position);
+            assert file != null;
             switch (file.type) {
                 case Resource: {
-                    if (position == 0) {
+                    if (position == fileListAdapter.getCount() - 1) {
                         showLoginDialog();
                     } else {
                         var db = Database.getInstance(this).getDatabase();
@@ -76,7 +77,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 case Epub: {
                     var db = Database.getInstance(this).getDatabase();
-                    var type = db.get_epub_info(file.id, make_uri(file.name)).second;
+                    var type = db.get_epub_info(file.id, make_uri(file.name)).view_type;
                     Intent intent;
                     if (type == ViewType.Comic) {
                         intent = new Intent(MainActivity.this, ComicActivity.class);
@@ -104,24 +105,18 @@ public class MainActivity extends AppCompatActivity {
         builder.setTitle("确认删除");
 
         // 设置确认按钮及其点击事件
-        builder.setPositiveButton("删除", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                // 处理删除操作，这里简单地显示一个 Toast 消息
-                var db = Database.getInstance(MainActivity.this).getDatabase();
-                db.delete_webdav(id);
-                Toast.makeText(MainActivity.this, "删除成功", Toast.LENGTH_SHORT).show();
-                dialog.dismiss(); // 关闭对话框
-                init_resource_list();
-            }
+        builder.setPositiveButton("删除", (dialog, which) -> {
+            // 处理删除操作，这里简单地显示一个 Toast 消息
+            var db = Database.getInstance(MainActivity.this).getDatabase();
+            db.delete_webdav(id);
+            Toast.makeText(MainActivity.this, "删除成功", Toast.LENGTH_SHORT).show();
+            dialog.dismiss(); // 关闭对话框
+            init_resource_list();
         });
         // 设置取消按钮及其点击事件
-        builder.setNegativeButton("取消", new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialog, int which) {
-                // 取消操作，关闭对话框
-                dialog.dismiss();
-            }
+        builder.setNegativeButton("取消", (dialog, which) -> {
+            // 取消操作，关闭对话框
+            dialog.dismiss();
         });
 
         // 创建并显示对话框
@@ -145,19 +140,17 @@ public class MainActivity extends AppCompatActivity {
         etPassword.setText("a123456");
         // 创建 AlertDialog.Builder 对象
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("登录")
+        builder.setTitle("添加webdav")
                 .setView(dialogView)
-                .setPositiveButton("登录", new DialogInterface.OnClickListener() {
+                .setPositiveButton("添加", new DialogInterface.OnClickListener() {
                     @Override
                     public void onClick(DialogInterface dialog, int which) {
                         // 获取用户输入的用户名、密码和 URL
                         String username = etUsername.getText().toString();
                         String password = etPassword.getText().toString();
                         String url = etUrl.getText().toString();
-
                         var db = Database.getInstance(MainActivity.this).getDatabase();
                         db.add_webdav(url, username, password);
-                        // 处理登录逻辑，这里简单地显示一个 Toast 消息
                         Toast.makeText(MainActivity.this, "添加成功", Toast.LENGTH_SHORT).show();
                         init_resource_list();
                     }
@@ -179,10 +172,10 @@ public class MainActivity extends AppCompatActivity {
     public void init_resource_list() {
         var db = Database.getInstance(this).getDatabase();
         fileListAdapter.clear();
-        fileListAdapter.addAll(new File(0, "新增webdav", FileType.Resource));
         for (var file : db.resource_list()) {
             fileListAdapter.addAll(file);
         }
+        fileListAdapter.addAll(new File(0, "新增webdav", FileType.Resource));
         fileListAdapter.notifyDataSetChanged();
     }
 

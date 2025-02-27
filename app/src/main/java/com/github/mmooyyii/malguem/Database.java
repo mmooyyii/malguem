@@ -46,9 +46,9 @@ public class Database {
         private static final int DATABASE_VERSION = 1;
 
         // 创建表的 SQL 语句
-        private static final String RESOURCE_TABLE = "CREATE TABLE resource (    id INTEGER PRIMARY KEY,    name TEXT NOT NULL,    resource_type INTEGER NOT NULL,    json_info TEXT NOT NULL);";
+        private static final String RESOURCE_TABLE = "CREATE TABLE resource (id INTEGER PRIMARY KEY, name TEXT NOT NULL, resource_type INTEGER NOT NULL, json_info TEXT NOT NULL);";
 
-        private static final String EPUB_TABLE = "CREATE TABLE epub (    resource_id INTEGER NOT NULL,    path TEXT NOT NULL,    current_page INTEGER NOT NULL default 0, view_type INTEGER NOT NULL default 0   , PRIMARY KEY (resource_id, path));";
+        private static final String EPUB_TABLE = "CREATE TABLE epub (resource_id INTEGER NOT NULL,path TEXT NOT NULL, current_page INTEGER NOT NULL default 0, page_offset INTEGER NOT NULL default 0, view_type INTEGER NOT NULL default 0, PRIMARY KEY (resource_id, path));";
 
         public DatabaseHelper(Context context) {
             super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -107,11 +107,12 @@ public class Database {
             db.delete("resource", "id=?", new String[]{String.valueOf(resource_id)});
         }
 
-        public void save_history(int resource_id, String path, int current_page) {
+        public void save_history(int resource_id, String path, int current_page, int page_offset) {
             init_epub(resource_id, path);
             var cur = getWritableDatabase();
             ContentValues values = new ContentValues();
             values.put("current_page", current_page);
+            values.put("page_offset", page_offset);
             cur.update("epub", values, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path});
         }
 
@@ -121,6 +122,7 @@ public class Database {
             values.put("resource_id", resource_id);
             values.put("path", path);
             values.put("current_page", 0);
+            values.put("page_offset", 0);
             values.put("view_type", 0);
             cur.insertWithOnConflict("epub", null, values, SQLiteDatabase.CONFLICT_IGNORE);
         }
@@ -132,19 +134,21 @@ public class Database {
                     new String[]{String.valueOf(resource_id), path});
         }
 
-        public Pair<Integer, ViewType> get_epub_info(int resource_id, String path) {
+        public ReadHistory get_epub_info(int resource_id, String path) {
+            var output = new ReadHistory();
             var db = getReadableDatabase();
-            var cursor = db.query("epub", new String[]{"current_page", "view_type"}, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path}, null, null, null);
+            var cursor = db.query("epub", new String[]{"current_page", "page_offset", "view_type"}, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path}, null, null, null);
             if (cursor.moveToNext()) {
-                var page = cursor.getInt(cursor.getColumnIndexOrThrow("current_page"));
+                output.current_page = cursor.getInt(cursor.getColumnIndexOrThrow("current_page"));
+                output.page_offset = cursor.getInt(cursor.getColumnIndexOrThrow("page_offset"));
                 var type = cursor.getInt(cursor.getColumnIndexOrThrow("view_type"));
                 if (type == 0) {
-                    return Pair.create(page, ViewType.Comic);
+                    output.view_type = ViewType.Comic;
                 } else {
-                    return Pair.create(page, ViewType.Novel);
+                    output.view_type = ViewType.Novel;
                 }
             }
-            return Pair.create(0, ViewType.Comic);
+            return output;
         }
 
         public HashMap<String, ViewType> get_view_types(int resource_id, List<String> paths) {
