@@ -81,6 +81,7 @@ public class WebdavResource implements ResourceInterface {
         throw new IOException("http 请求失败, 打开目录" + make_dir_url(path));
     }
 
+
     public byte[] open(String uri, Slice slice) throws Exception {
         var url = _url + uri;
         var builder = new Request.Builder().url(url).
@@ -96,6 +97,10 @@ public class WebdavResource implements ResourceInterface {
             }
         }
         throw new IOException("http 请求失败, 打不开" + url);
+    }
+
+    public byte[][] open(String uri, Slice[] slice) throws Exception {
+        return null;
     }
 }
 

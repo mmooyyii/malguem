@@ -32,7 +32,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-
 }
 
 dependencies {
@@ -44,4 +43,6 @@ dependencies {
     implementation("io.documentnode:epub4j-core:4.2.1") {
         exclude(group = "xmlpull")
     }
+    implementation(libs.jsoup)
+
 }
