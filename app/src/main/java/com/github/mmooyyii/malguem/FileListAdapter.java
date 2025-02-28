@@ -28,8 +28,8 @@ public class FileListAdapter extends ArrayAdapter<File> {
 
         TextView fileTypeTextView = convertView.findViewById(R.id.rightTextView);
         fileTypeTextView.setText("");
-        if (file.type == FileType.Epub) {
-            if (file.view_type == ViewType.Novel) {
+        if (file.type == File.FileType.Epub) {
+            if (file.view_type == File.ViewType.Novel) {
                 fileTypeTextView.setText("小说");
             } else {
                 fileTypeTextView.setText("漫画");

@@ -41,9 +41,9 @@ public class MainActivity extends AppCompatActivity {
         fileListView.setOnItemLongClickListener((parent, view, position, id) -> {
             var file = fileListAdapter.getItem(position);
             assert file != null;
-            if (file.type == FileType.Resource && position != fileListAdapter.getCount() - 1) {
+            if (file.type == File.FileType.Resource && position != fileListAdapter.getCount() - 1) {
                 showDeleteConfirmationDialog(file.id);
-            } else if (file.type == FileType.Epub) {
+            } else if (file.type == File.FileType.Epub) {
                 var db = Database.getInstance(this).getDatabase();
                 db.switch_view_type(file.id, make_uri(file.name));
                 new FetchFileListTask().execute();
@@ -79,7 +79,7 @@ public class MainActivity extends AppCompatActivity {
                     var db = Database.getInstance(this).getDatabase();
                     var type = db.get_epub_info(file.id, make_uri(file.name)).view_type;
                     Intent intent;
-                    if (type == ViewType.Comic) {
+                    if (type == File.ViewType.Comic) {
                         intent = new Intent(MainActivity.this, ComicActivity.class);
                     } else {
                         intent = new Intent(MainActivity.this, NovelActivity.class);
@@ -175,7 +175,7 @@ public class MainActivity extends AppCompatActivity {
         for (var file : db.resource_list()) {
             fileListAdapter.addAll(file);
         }
-        fileListAdapter.addAll(new File(0, "新增webdav", FileType.Resource));
+        fileListAdapter.addAll(new File(0, "新增webdav", File.FileType.Resource));
         fileListAdapter.notifyDataSetChanged();
     }
 
@@ -196,14 +196,14 @@ public class MainActivity extends AppCompatActivity {
                 var files = client.ls(current_resource_id, pwd);
                 var epubs = new ArrayList<String>();
                 for (var file : files) {
-                    if (file.type == FileType.Epub) {
+                    if (file.type == File.FileType.Epub) {
                         epubs.add(make_uri(file.name));
                     }
                 }
                 var db = Database.getInstance(MainActivity.this).getDatabase();
                 var map = db.get_view_types(current_resource_id, epubs);
                 for (var file : files) {
-                    if (file.type == FileType.Epub && map.containsKey(make_uri(file.name))) {
+                    if (file.type == File.FileType.Epub && map.containsKey(make_uri(file.name))) {
                         file.view_type = map.get(make_uri(file.name));
                     }
                 }

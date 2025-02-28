@@ -16,9 +16,6 @@ import com.google.gson.reflect.TypeToken;
 import java.util.HashMap;
 
 
-enum ViewType {
-    Novel, Comic
-}
 
 public class Database {
     private static Database instance;
@@ -143,16 +140,16 @@ public class Database {
                 output.page_offset = cursor.getInt(cursor.getColumnIndexOrThrow("page_offset"));
                 var type = cursor.getInt(cursor.getColumnIndexOrThrow("view_type"));
                 if (type == 0) {
-                    output.view_type = ViewType.Comic;
+                    output.view_type = File.ViewType.Comic;
                 } else {
-                    output.view_type = ViewType.Novel;
+                    output.view_type = File.ViewType.Novel;
                 }
             }
             return output;
         }
 
-        public HashMap<String, ViewType> get_view_types(int resource_id, List<String> paths) {
-            var output = new HashMap<String, ViewType>();
+        public HashMap<String, File.ViewType> get_view_types(int resource_id, List<String> paths) {
+            var output = new HashMap<String, File.ViewType>();
             if (paths.isEmpty()) {
                 return output;
             }
@@ -165,9 +162,9 @@ public class Database {
                 var path = cursor.getString(cursor.getColumnIndexOrThrow("path"));
                 var view_type = cursor.getInt(cursor.getColumnIndexOrThrow("view_type"));
                 if (view_type == 0) {
-                    output.put(path, ViewType.Comic);
+                    output.put(path, File.ViewType.Comic);
                 } else {
-                    output.put(path, ViewType.Novel);
+                    output.put(path, File.ViewType.Novel);
                 }
             }
             return output;
@@ -180,7 +177,7 @@ public class Database {
             while (cursor.moveToNext()) {
                 var id = cursor.getInt(cursor.getColumnIndexOrThrow("id"));
                 var name = cursor.getString(cursor.getColumnIndexOrThrow("name"));
-                list.add(new File(id, name, FileType.Resource));
+                list.add(new File(id, name, File.FileType.Resource));
             }
             cursor.close();
             return list;

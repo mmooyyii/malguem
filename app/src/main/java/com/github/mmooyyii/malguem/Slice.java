@@ -1,11 +1,5 @@
 package com.github.mmooyyii.malguem;
 
-
-import java.util.List;
-
-import okhttp3.Response;
-
-
 class Slice {
     Integer offset;
     Integer size;
@@ -21,12 +15,3 @@ class Slice {
         return offset + "-" + (offset + size - 1);
     }
 }
-
-interface ResourceInterface {
-    List<File> ls(int id, List<String> path) throws Exception;
-
-    byte[] open(String uri) throws Exception;
-
-    byte[] open(String uri, Slice slice) throws Exception;
-}
-

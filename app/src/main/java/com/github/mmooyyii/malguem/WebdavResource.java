@@ -70,9 +70,9 @@ public class WebdavResource implements ResourceInterface {
                     content = url_decode(content);
                     var paths = content.split("/");
                     if (content.endsWith("/")) {
-                        dirs.add(new File(resource_id, paths[paths.length - 1], FileType.Dir));
+                        dirs.add(new File(resource_id, paths[paths.length - 1], File.FileType.Dir));
                     } else if (content.endsWith(".epub")) {
-                        dirs.add(new File(resource_id, paths[paths.length - 1], FileType.Epub));
+                        dirs.add(new File(resource_id, paths[paths.length - 1], File.FileType.Epub));
                     }
                 }
                 return dirs;
@@ -81,26 +81,14 @@ public class WebdavResource implements ResourceInterface {
         throw new IOException("http 请求失败, 打开目录" + make_dir_url(path));
     }
 
-    public byte[] open(String uri) throws IOException {
-        var url = _url + uri;
-        Request request = new Request.Builder().url(url).
-                addHeader("Authorization", Credentials.basic(_username, _password)).build();
-        try (Response response = client.newCall(request).execute()) {
-            if (response.isSuccessful()) {
-                assert response.body() != null;
-                return response.body().bytes();
-            }
-        }
-        throw new IOException("http 请求失败, 打不开" + url);
-    }
-
-
     public byte[] open(String uri, Slice slice) throws Exception {
         var url = _url + uri;
-        Request request = new Request.Builder().url(url).
-                addHeader("Authorization", Credentials.basic(_username, _password)).
-                addHeader("Range", "bytes=" + slice.to_string()).
-                build();
+        var builder = new Request.Builder().url(url).
+                addHeader("Authorization", Credentials.basic(_username, _password));
+        if (slice != null) {
+            builder.addHeader("Range", "bytes=" + slice.to_string());
+        }
+        var request = builder.build();
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 assert response.body() != null;
