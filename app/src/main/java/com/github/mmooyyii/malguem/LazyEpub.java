@@ -3,17 +3,28 @@ package com.github.mmooyyii.malguem;
 import android.os.Build;
 import android.util.Pair;
 
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+import org.xml.sax.SAXException;
+
+import java.io.File;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.Inflater;
 import java.util.zip.InflaterInputStream;
+
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.parsers.ParserConfigurationException;
 
 import io.documentnode.epub4j.domain.Resource;
 
@@ -23,7 +34,7 @@ public class LazyEpub {
 
     private static final int LOCAL_HEADER_SIGNATURE = 0x04034b50;
 
-
+    String title;
     String uri;
     ResourceInterface file;
     // resource map
@@ -31,10 +42,14 @@ public class LazyEpub {
 
     HashMap<String, byte[]> resource; // name -> html
 
+    HashMap<String, String> resource_type; // name -> media_type name
+
     Map<String, CentralDirEntry> zip_dir; // page -> (offset,size)
 
     Integer centralDirOffset;
     Integer centralDirSize;
+
+    String opf_file;
 
     public LazyEpub(String epub_uri, ResourceInterface client) throws Exception {
         uri = epub_uri;
@@ -42,6 +57,7 @@ public class LazyEpub {
         contents = new ArrayList<>();
         resource = new HashMap<>();
         zip_dir = new HashMap<>();
+        resource_type = new HashMap<>();
         init_epub_dir();
     }
 
@@ -53,6 +69,20 @@ public class LazyEpub {
         slice.offset = centralDirOffset;
         slice.size = centralDirSize;
         initCentralDirectory(file.open(uri, slice));
+        initContent();
+    }
+
+    public String page(int page) {
+        try {
+            var filename = contents.get(page);
+            return new String(load_file(filename), "UTF-8");
+        } catch (Exception e) {
+            return "无法读取页面";
+        }
+    }
+
+    public int total_pages() {
+        return contents.size();
     }
 
     private void initCentralDirLocate(byte[] endBytes) {
@@ -106,13 +136,61 @@ public class LazyEpub {
                     fileName, compressedSize, uncompressedSize,
                     localHeaderOffset, compressionMethod, extraFieldLength
             );
+            Path path = Paths.get(fileName);
+            // 遍历路径的每一部分
+            for (int i = 0; i < path.getNameCount(); i++) {
+                // 获取从第 i 部分到末尾的子路径
+                var subPath = path.subpath(i, path.getNameCount()).toString();
+                if (!zip_dir.containsKey(subPath)) {
+                    zip_dir.put(subPath, entry);
+                }
+            }
             zip_dir.put(fileName, entry);
-            if (fileName.startsWith("OEBPS/Text")) {
-                contents.add(fileName);
+            if (fileName.endsWith(".opf")) {
+                // 正确做法应该是去META-INF/container.xml里找, 这样做应该也行
+                opf_file = fileName;
             }
             // 计算下一个条目的起始位置
             position += 46 + fileNameLength + extraFieldLength + fileCommentLength;
         }
+    }
+
+
+    public void initContent() throws Exception {
+        // 用.opf来解析全书结构
+        if (opf_file == null) {
+            throw new IllegalArgumentException("无法解析epub");
+        }
+        var opf = load_file(opf_file);
+        Document doc = DocumentBuilderFactory.newInstance()
+                .newDocumentBuilder().parse(new ByteArrayInputStream(opf));
+
+        doc.getDocumentElement().normalize();
+        //  解析元数据
+        NodeList titles = doc.getElementsByTagName("dc:title");
+        title = titles.item(0).getTextContent();
+        // 解析资源清单
+        NodeList items = doc.getElementsByTagName("item");
+        var id_to_path = new HashMap<String, String>();
+        for (int i = 0; i < items.getLength(); i++) {
+            Element item = (Element) items.item(i);
+            String id = item.getAttribute("id");
+            String href = item.getAttribute("href");
+            String mediaType = item.getAttribute("media-type");
+            resource_type.put(href, mediaType);
+            id_to_path.put(id, href);
+        }
+        // 解析阅读顺序
+        NodeList spineItems = doc.getElementsByTagName("itemref");
+        for (int i = 0; i < spineItems.getLength(); i++) {
+            String idref = spineItems.item(i).getAttributes()
+                    .getNamedItem("idref").getNodeValue();
+            contents.add(id_to_path.get(idref));
+        }
+    }
+
+    public boolean is_file_exist(String filename) {
+        return zip_dir.containsKey(filename);
     }
 
     public byte[] load_file(String filename) throws Exception {
@@ -155,7 +233,6 @@ public class LazyEpub {
         } else {
             throw new IllegalArgumentException("无法解压epub: " + entry.compressionMethod);
         }
-
     }
 
     public static long parseDataOffset(byte[] localHeaderData) {
@@ -183,7 +260,6 @@ public class LazyEpub {
         // 计算数据偏移量：本地头长度(30) + 文件名长度 + 扩展字段长度
         return 30L + fileNameLength + extraFieldLength;
     }
-
 
     public static class CentralDirEntry {
         public final String fileName;

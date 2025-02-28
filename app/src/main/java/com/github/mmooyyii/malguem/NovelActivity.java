@@ -9,9 +9,11 @@ import android.os.Bundle;
 import android.os.AsyncTask;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
 
 import android.webkit.WebView;
@@ -23,7 +25,8 @@ public class NovelActivity extends AppCompatActivity {
 
     private WebView novelView;
     private TextView pageView;
-    Epub epub_book;
+    LazyEpub epub_book;
+    int page_offset;
     int epub_book_page;
     int resource_id;
     String book_uri;
@@ -60,7 +63,7 @@ public class NovelActivity extends AppCompatActivity {
         builder.setView(dialogView);
         builder.setCancelable(false);
         progressDialog = builder.create();
-        new NovelActivity.ReadEpub().execute();
+        new NovelActivity.InitEpub().execute();
     }
 
     @Override
@@ -75,9 +78,10 @@ public class NovelActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
-    public void show_epub_page(int page, int page_offset) {
-        var html = epub_book.page(page);
-        novelView.setWebViewClient(new WebViewClient() {
+    public void show_epub_page(WebView view, String html) {
+        novelView.scrollTo(0, page_offset);
+        page_offset = 0;
+        view.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 var req = request.getUrl().getPath();
@@ -87,22 +91,27 @@ public class NovelActivity extends AppCompatActivity {
                 if (!req.isEmpty() && req.charAt(0) == '/') {
                     req = req.substring(1);
                 }
-                if (epub_book.resource_map().containsKey(req)) {
-                    var r = epub_book.resource_map().get(req);
-                    assert r != null;
+                if (epub_book.is_file_exist(req)) {
                     try {
-                        return new WebResourceResponse(r.getMediaType().getName(), "UTF-8", r.getInputStream());
-                    } catch (IOException e) {
+                        var r = epub_book.load_file(req);
+                        if (req.endsWith("jpg")) {
+                            return new WebResourceResponse("image/jpeg", "UTF-8", new ByteArrayInputStream(r));
+                        } else if (req.endsWith("css")) {
+                            return new WebResourceResponse("text/css", "UTF-8", new ByteArrayInputStream(r));
+                        } else {
+                            return new WebResourceResponse("application/xhtml+xml", "UTF-8", new ByteArrayInputStream(r));
+                        }
+                    } catch (Exception e) {
                         return super.shouldInterceptRequest(view, request);
                     }
                 }
                 return super.shouldInterceptRequest(view, request);
             }
         });
-        novelView.scrollTo(0, page_offset);
-        novelView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
-        pageView.setText((page + 1) + "/" + epub_book.total_pages());
+        view.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
+        pageView.setText((epub_book_page + 1) + "/" + epub_book.total_pages());
     }
+
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
@@ -113,13 +122,13 @@ public class NovelActivity extends AppCompatActivity {
                 case KeyEvent.KEYCODE_DPAD_LEFT:
                     if (epub_book_page > 0) {
                         epub_book_page -= 1;
-                        show_epub_page(epub_book_page, 0);
+                        new ReadEpub().execute();
                     }
                     return true;
                 case KeyEvent.KEYCODE_DPAD_RIGHT:
                     if (epub_book_page + 1 < epub_book.total_pages()) {
                         epub_book_page += 1;
-                        show_epub_page(epub_book_page, 0);
+                        new ReadEpub().execute();
                     }
                     return true;
             }
@@ -127,7 +136,7 @@ public class NovelActivity extends AppCompatActivity {
         return super.dispatchKeyEvent(event);
     }
 
-    private class ReadEpub extends AsyncTask<String, Void, Epub> {
+    private class InitEpub extends AsyncTask<String, Void, LazyEpub> {
 
         @Override
         protected void onPreExecute() {
@@ -137,17 +146,16 @@ public class NovelActivity extends AppCompatActivity {
         }
 
         @Override
-        protected Epub doInBackground(String... params) {
+        protected LazyEpub doInBackground(String... params) {
             try {
-                var raw = client.open(book_uri);
-                return new Epub(raw);
-            } catch (IOException e) {
+                return new LazyEpub(book_uri, client);
+            } catch (Exception e) {
                 return null;
             }
         }
 
         @Override
-        protected void onPostExecute(Epub book) {
+        protected void onPostExecute(LazyEpub book) {
             progressDialog.dismiss();
             if (book == null) {
                 android.widget.Toast.makeText(NovelActivity.this, "打开epub失败", android.widget.Toast.LENGTH_LONG).show();
@@ -157,8 +165,22 @@ public class NovelActivity extends AppCompatActivity {
             var info = db.get_epub_info(resource_id, book_uri);
             epub_book = book;
             epub_book_page = info.current_page;
+            page_offset = info.page_offset;
+        }
+    }
 
-            show_epub_page(epub_book_page, info.page_offset);
+    private class ReadEpub extends AsyncTask<Void, String, String> {
+        @Override
+        protected String doInBackground(Void... params) {
+            if (epub_book_page < epub_book.total_pages()) {
+                return epub_book.page(epub_book_page);
+            }
+            return "完";
+        }
+
+        @Override
+        protected void onPostExecute(String html) {
+            show_epub_page(novelView, html);
         }
     }
 }
