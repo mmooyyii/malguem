@@ -15,6 +15,7 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 import android.view.LayoutInflater;
 import android.widget.LinearLayout;
@@ -182,6 +183,14 @@ public class ComicActivity extends AppCompatActivity {
         @Override
         protected Epub doInBackground(String... params) {
             try {
+                try {
+                    var lazy = new LazyEpub(book_uri, client);
+                    var x = lazy.load_file("OEBPS/Text/chapter1.xhtml");
+                    var y =  new String(x, "UTF-8");
+                    System.out.printf(y);
+                } catch (Exception e) {
+                    System.out.printf(e.toString());
+                }
                 var raw = client.open(book_uri);
                 return new Epub(raw);
             } catch (IOException e) {

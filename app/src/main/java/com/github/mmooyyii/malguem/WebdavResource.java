@@ -93,6 +93,22 @@ public class WebdavResource implements ResourceInterface {
         }
         throw new IOException("http 请求失败, 打不开" + url);
     }
+
+
+    public byte[] open(String uri, Slice slice) throws Exception {
+        var url = _url + uri;
+        Request request = new Request.Builder().url(url).
+                addHeader("Authorization", Credentials.basic(_username, _password)).
+                addHeader("Range", "bytes=" + slice.to_string()).
+                build();
+        try (Response response = client.newCall(request).execute()) {
+            if (response.isSuccessful()) {
+                assert response.body() != null;
+                return response.body().bytes();
+            }
+        }
+        throw new IOException("http 请求失败, 打不开" + url);
+    }
 }
 
 
