@@ -1,8 +1,10 @@
 package com.github.mmooyyii.malguem;
 
 import android.os.Build;
+import android.util.Log;
 import android.util.Pair;
 
+import org.jsoup.Jsoup;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -17,6 +19,7 @@ import java.nio.ByteOrder;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -75,7 +78,18 @@ public class LazyEpub {
     public String page(int page) {
         try {
             var filename = contents.get(page);
-            return new String(load_file(filename), "UTF-8");
+            var html = new String(load_file(filename), "UTF-8");
+            var doc = Jsoup.parse(html);
+            for (var script : doc.select("script[src]")) {
+                load_file(script.attr("src"));
+            }
+            for (var link : doc.select("link[href]")) {
+                load_file(link.attr("href"));
+            }
+            for (var img : doc.select("img[src]")) {
+                load_file(img.attr("src"));
+            }
+            return html;
         } catch (Exception e) {
             return "无法读取页面";
         }
@@ -194,23 +208,28 @@ public class LazyEpub {
     }
 
     public byte[] load_file(String filename) throws Exception {
+        while (filename.startsWith(".") || filename.startsWith("/")) {
+            filename = filename.substring(1);
+        }
         if (resource.containsKey(filename)) {
+            Log.d("lazy_epub", "缓存命中 " + filename);
             return resource.get(filename);
         }
         if (!zip_dir.containsKey(filename)) {
             throw new IllegalArgumentException("no such file");
         }
+        Log.d("lazy_epub", "缓存未命中 " + filename);
         var entry = zip_dir.get(filename);
         var slice = new Slice();
         assert entry != null;
         slice.offset = Math.toIntExact(entry.localHeaderOffset);
         slice.size = 1024;
+        Log.d("lazy_epub", "获取dataOffset");
         long dataOffset = entry.localHeaderOffset + parseDataOffset(file.open(uri, slice));
-
         slice.offset = Math.toIntExact(dataOffset);
         slice.size = Math.toIntExact(entry.compressedSize);
+        Log.d("lazy_epub", "获取文件内容");
         var bytes = file.open(uri, slice);
-
         if (entry.compressionMethod == 0) {
             resource.put(filename, bytes);
             return bytes;
@@ -247,16 +266,13 @@ public class LazyEpub {
         if (signature != LOCAL_HEADER_SIGNATURE) {
             throw new IllegalArgumentException("无效的本地文件头签名");
         }
-
         // 解析文件名和扩展字段长度
         int fileNameLength = ByteBuffer.wrap(localHeaderData, 26, 2)
                 .order(ByteOrder.LITTLE_ENDIAN)
                 .getShort() & 0xFFFF;
-
         int extraFieldLength = ByteBuffer.wrap(localHeaderData, 28, 2)
                 .order(ByteOrder.LITTLE_ENDIAN)
                 .getShort() & 0xFFFF;
-
         // 计算数据偏移量：本地头长度(30) + 文件名长度 + 扩展字段长度
         return 30L + fileNameLength + extraFieldLength;
     }

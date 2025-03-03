@@ -1,5 +1,7 @@
 package com.github.mmooyyii.malguem;
 
+import android.util.Log;
+
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
@@ -83,6 +85,7 @@ public class WebdavResource implements ResourceInterface {
 
 
     public byte[] open(String uri, Slice slice) throws Exception {
+        long startTime = System.currentTimeMillis();
         var url = _url + uri;
         var builder = new Request.Builder().url(url).
                 addHeader("Authorization", Credentials.basic(_username, _password));
@@ -93,7 +96,11 @@ public class WebdavResource implements ResourceInterface {
         try (Response response = client.newCall(request).execute()) {
             if (response.isSuccessful()) {
                 assert response.body() != null;
-                return response.body().bytes();
+                var bytes = response.body().bytes();
+                if (slice != null) {
+                    Log.d("lazy_epub", (System.currentTimeMillis() - startTime) + "ms " + uri + "range: " + slice.to_string());
+                }
+                return bytes;
             }
         }
         throw new IOException("http 请求失败, 打不开" + url);

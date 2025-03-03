@@ -102,7 +102,6 @@ public class ComicActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
-
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
