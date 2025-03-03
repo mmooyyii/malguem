@@ -1,16 +1,15 @@
 package com.github.mmooyyii.malguem;
 
+
 import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.FileUtils;
-import android.util.Log;
 import android.view.KeyEvent;
-import android.view.TextureView;
-import android.view.View;
+import android.view.LayoutInflater;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.TextView;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -18,11 +17,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.Arrays;
-
-import android.view.LayoutInflater;
-import android.widget.LinearLayout;
-import android.widget.TextView;
+import java.text.DecimalFormat;
 
 
 public class ComicActivity extends AppCompatActivity {
@@ -94,7 +89,7 @@ public class ComicActivity extends AppCompatActivity {
         builder.setView(dialogView);
         builder.setCancelable(false);
         progressDialog = builder.create();
-        new ComicActivity.ReadEpub().execute();
+        new ComicActivity.ReadEpub(dialogView).execute();
     }
 
     @Override
@@ -176,15 +171,25 @@ public class ComicActivity extends AppCompatActivity {
         return super.dispatchKeyEvent(event);
     }
 
-    private class ReadEpub extends AsyncTask<String, Void, Epub> {
+
+    private class ReadEpub extends AsyncTask<String, Integer, Epub> {
+
+        private final TextView progressMessageTextView;
+
+        DecimalFormat fmt;
+
+        public ReadEpub(android.view.View dialogView) {
+            this.progressMessageTextView = dialogView.findViewById(R.id.message);
+            this.fmt = new DecimalFormat("0.000");
+        }
 
         @Override
         protected void onPreExecute() {
             super.onPreExecute();
             // 显示 ProgressDialog
             progressDialog.show();
+            progressMessageTextView.setText("正在打开epub");
         }
-
 
         @Override
         protected Epub doInBackground(String... params) {
@@ -193,15 +198,21 @@ public class ComicActivity extends AppCompatActivity {
                 var diskCache = DiskCache.getInstance(ComicActivity.this).getCache();
                 var snapshot = diskCache.get(key);
                 if (snapshot != null) {
-                    var bytes = snapshot.getInputStream(0).readAllBytes();
-                    return new Epub(bytes);
+                    try (var inputStream = snapshot.getInputStream(0)) {
+
+                        return new Epub(DiskCache.readAll(inputStream));
+                    } finally {
+                        snapshot.close();
+                    }
                 }
-                var raw = client.open(book_uri);
+                var raw = client.open(book_uri, (current_bytes, total_bytes) -> publishProgress((int) current_bytes, (int) total_bytes));
+                if (raw == null) {
+                    return null;
+                }
                 var editor = diskCache.edit(key);
                 if (editor != null) {
                     OutputStream outputStream = editor.newOutputStream(0);
-                    // 将下载的文件流写入输出流（如使用OkHttp或HttpURLConnection）
-                    FileUtils.copy(new ByteArrayInputStream(raw), outputStream);
+                    DiskCache.copy(new ByteArrayInputStream(raw), outputStream);
                     editor.commit(); // 提交写入
                 }
                 return new Epub(raw);
@@ -226,6 +237,15 @@ public class ComicActivity extends AppCompatActivity {
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
+        }
+
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            double current_bytes = values[0];
+            double total_bytes = values[1];
+            var a = fmt.format(current_bytes / 1024 / 1024);
+            var b = fmt.format(total_bytes / 1024 / 1024);
+            progressMessageTextView.setText("已完成 " + a + " MB / " + b + "MB");
         }
     }
 }

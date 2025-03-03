@@ -1,19 +1,21 @@
 package com.github.mmooyyii.malguem;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
 import java.util.List;
-
-import java.io.IOException;
 import java.util.Objects;
+import java.util.concurrent.CountDownLatch;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-
-import okhttp3.*;
-
+import okhttp3.Call;
+import okhttp3.Callback;
 import okhttp3.Credentials;
+import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.Response;
@@ -81,17 +83,52 @@ public class WebdavResource implements ResourceInterface {
         throw new IOException("http 请求失败, 打开目录" + make_dir_url(path));
     }
 
-    public byte[] open(String uri) throws IOException {
+    public byte[] open(String uri, final DownloadListener listener) {
         var url = _url + uri;
-        Request request = new Request.Builder().url(url).
-                addHeader("Authorization", Credentials.basic(_username, _password)).build();
-        try (Response response = client.newCall(request).execute()) {
-            if (response.isSuccessful()) {
-                assert response.body() != null;
-                return response.body().bytes();
+        Request request = new Request.
+                Builder().
+                url(url).
+                addHeader("Authorization", Credentials.basic(_username, _password)).
+                build();
+
+        final CountDownLatch latch = new CountDownLatch(1);
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        client.newCall(request).enqueue(new Callback() {
+            @Override
+            public void onFailure(Call call, IOException e) {
+                latch.countDown();
             }
+            @Override
+            public void onResponse(Call call, Response response) throws IOException {
+                if (response.isSuccessful()) {
+                    long totalLength = response.body().contentLength();
+                    InputStream inputStream = response.body().byteStream();
+
+                    byte[] buffer = new byte[4096];
+                    int bytesRead;
+                    long totalBytesRead = 0;
+                    while ((bytesRead = inputStream.read(buffer)) != -1) {
+                        totalBytesRead += bytesRead;
+                        bos.write(buffer, 0, bytesRead);
+                        // 计算下载进度
+                        // 回调到主线程更新UI
+                        listener.onProgress(totalBytesRead, totalLength);
+                    }
+                    inputStream.close();
+                }
+                latch.countDown();
+            }
+        });
+        try {
+            // 等待异步请求完成
+            latch.await();
+        } catch (InterruptedException e) {
+            return null;
         }
-        throw new IOException("http 请求失败, 打不开" + url);
+        if (bos.size() == 0) {
+            return null;
+        }
+        return bos.toByteArray();
     }
 }
 

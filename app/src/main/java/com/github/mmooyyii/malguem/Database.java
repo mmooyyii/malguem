@@ -5,15 +5,13 @@ import android.content.Context;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.util.Log;
-import android.util.Pair;
-
-import java.util.ArrayList;
-import java.util.List;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 
 
 public class Database {

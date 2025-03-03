@@ -1,17 +1,13 @@
 package com.github.mmooyyii.malguem;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.util.List;
+import java.util.Map;
+
 import io.documentnode.epub4j.domain.Book;
 import io.documentnode.epub4j.domain.Resource;
 import io.documentnode.epub4j.epub.EpubReader;
-import okhttp3.Response;
-
-import java.io.ByteArrayInputStream;
-
-
-import java.io.IOException;
-import java.io.InputStream;
-import java.util.List;
-import java.util.Map;
 
 public class Epub {
 

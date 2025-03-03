@@ -5,8 +5,11 @@ import android.content.SharedPreferences;
 
 import com.jakewharton.disklrucache.DiskLruCache;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.io.UnsupportedEncodingException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -17,7 +20,6 @@ public class DiskCache {
 
     private static DiskLruCache cache;
 
-    private boolean enable;
 
     private DiskCache(Context context) throws IOException {
         File cacheDir = new File(context.getCacheDir(), "file_cache");
@@ -27,7 +29,6 @@ public class DiskCache {
         int maxSize = sharedPref.getInt("max_local_cache_size", 5 * 1024) * 1024 * 1024;
         if (maxSize <= 0) {
             maxSize = 1;
-            enable = false;
         }
         cache = DiskLruCache.open(cacheDir, 1, 1, maxSize);
     }
@@ -59,18 +60,31 @@ public class DiskCache {
         }
     }
 
-    public boolean isEnable() {
-        return enable;
-    }
-
     public void setMaxSize(int size) {
         if (size == 0) {
-            enable = false;
             cache.setMaxSize(1);
         } else {
-            enable = true;
             cache.setMaxSize(size);
         }
     }
 
+    static void copy(InputStream inputStream, OutputStream outputStream) throws IOException {
+        byte[] buffer = new byte[1024];
+        int length;
+        while ((length = inputStream.read(buffer)) > 0) {
+            outputStream.write(buffer, 0, length);
+        }
+        inputStream.close();
+        outputStream.close();
+    }
+
+    static byte[] readAll(InputStream inputStream) throws IOException {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        byte[] buffer = new byte[1024];
+        int len;
+        while ((len = inputStream.read(buffer)) != -1) {
+            bos.write(buffer, 0, len);
+        }
+        return bos.toByteArray();
+    }
 }

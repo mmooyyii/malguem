@@ -1,26 +1,23 @@
 package com.github.mmooyyii.malguem;
 
-import androidx.appcompat.app.AlertDialog;
-import androidx.appcompat.app.AppCompatActivity;
-
-import android.annotation.SuppressLint;
-import android.os.Bundle;
-
 import android.os.AsyncTask;
-import android.os.FileUtils;
+import android.os.Bundle;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
-import android.view.ViewGroup;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
+import android.webkit.WebView;
+import android.webkit.WebViewClient;
+import android.widget.TextView;
+
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
-
-import android.webkit.WebView;
-import android.webkit.WebViewClient;
-import android.widget.TextView;
+import java.text.DecimalFormat;
+import java.util.concurrent.CountDownLatch;
 
 
 public class NovelActivity extends AppCompatActivity {
@@ -61,7 +58,7 @@ public class NovelActivity extends AppCompatActivity {
         builder.setView(dialogView);
         builder.setCancelable(false);
         progressDialog = builder.create();
-        new NovelActivity.ReadEpub().execute();
+        new ReadEpub(dialogView).execute();
     }
 
     @Override
@@ -131,7 +128,16 @@ public class NovelActivity extends AppCompatActivity {
         return super.dispatchKeyEvent(event);
     }
 
-    private class ReadEpub extends AsyncTask<String, Void, Epub> {
+    private class ReadEpub extends AsyncTask<String, Integer, Epub> {
+
+        private final TextView progressMessageTextView;
+
+        DecimalFormat fmt;
+
+        public ReadEpub(android.view.View dialogView) {
+            this.progressMessageTextView = dialogView.findViewById(R.id.message);
+            this.fmt = new DecimalFormat("0.000");
+        }
 
         @Override
         protected void onPreExecute() {
@@ -148,19 +154,20 @@ public class NovelActivity extends AppCompatActivity {
                 var snapshot = diskCache.get(key);
                 if (snapshot != null) {
                     try (var inputStream = snapshot.getInputStream(0)) {
-                        return new Epub(inputStream.readAllBytes());
+                        return new Epub(DiskCache.readAll(inputStream));
                     } finally {
                         snapshot.close();
                     }
                 }
-                var raw = client.open(book_uri);
+                var raw = client.open(book_uri, (current_bytes, total_bytes) -> publishProgress((int) current_bytes, (int) total_bytes));
+                if (raw == null) {
+                    return null;
+                }
                 var editor = diskCache.edit(key);
                 if (editor != null) {
                     OutputStream outputStream = editor.newOutputStream(0);
-                    // 将下载的文件流写入输出流（如使用OkHttp或HttpURLConnection）
-                    FileUtils.copy(new ByteArrayInputStream(raw), outputStream);
+                    DiskCache.copy(new ByteArrayInputStream(raw), outputStream);
                     editor.commit(); // 提交写入
-                    outputStream.close();
                 }
                 return new Epub(raw);
             } catch (IOException e) {
@@ -179,8 +186,16 @@ public class NovelActivity extends AppCompatActivity {
             var info = db.get_epub_info(resource_id, book_uri);
             epub_book = book;
             epub_book_page = info.current_page;
-
             show_epub_page(epub_book_page, info.page_offset);
+        }
+
+        @Override
+        protected void onProgressUpdate(Integer... values) {
+            double current_bytes = values[0];
+            double total_bytes = values[1];
+            var a = fmt.format(current_bytes / 1024 / 1024);
+            var b = fmt.format(total_bytes / 1024 / 1024);
+            progressMessageTextView.setText("已完成 " + a + " MB / " + b + "MB");
         }
     }
 }
