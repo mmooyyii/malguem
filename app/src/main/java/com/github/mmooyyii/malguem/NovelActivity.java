@@ -166,6 +166,11 @@ public class NovelActivity extends AppCompatActivity {
             epub_book = book;
             epub_book_page = info.current_page;
             page_offset = info.page_offset;
+            try {
+                new ReadEpub().execute();
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
         }
     }
 

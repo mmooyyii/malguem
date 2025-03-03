@@ -2,6 +2,7 @@ package com.github.mmooyyii.malguem;
 
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.KeyEvent;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -12,12 +13,19 @@ import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import java.io.ByteArrayInputStream;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 
 import android.view.LayoutInflater;
 import android.widget.TextView;
 
 
 public class ComicActivity extends AppCompatActivity {
+
+    private BlockingQueue<Integer> taskQueue = new LinkedBlockingQueue<>();
+    private ExecutorService executor = Executors.newFixedThreadPool(1);
 
     private WebView ComicViewLeft;
     private WebView ComicViewRight;
@@ -87,6 +95,19 @@ public class ComicActivity extends AppCompatActivity {
         builder.setCancelable(false);
         progressDialog = builder.create();
         new ComicActivity.InitEpub().execute();
+
+        executor.submit(() -> {
+            try {
+                while (!Thread.currentThread().isInterrupted()) {  // 检查中断状态
+                    var n = taskQueue.take();
+                    Log.d("lazy_epub", "准备" + n);
+                    epub_book.prepare_page(n);
+                }
+            } catch (InterruptedException e) {
+                // 线程被中断时自动退出循环
+                Thread.currentThread().interrupt();  // 重置中断标志
+            }
+        });
     }
 
     @Override
@@ -97,6 +118,7 @@ public class ComicActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        executor.shutdownNow();
         var db = Database.getInstance(this).getDatabase();
         db.save_history(resource_id, book_uri, epub_book_page, 0);
         super.onDestroy();
@@ -112,6 +134,7 @@ public class ComicActivity extends AppCompatActivity {
                 try {
                     new ReadEpubLeft().execute();
                     new ReadEpubRight().execute();
+                    prepare_pages(5);
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
@@ -121,6 +144,7 @@ public class ComicActivity extends AppCompatActivity {
                 try {
                     new ReadEpubLeft().execute();
                     new ReadEpubRight().execute();
+                    prepare_pages(5);
                 } catch (Exception e) {
                     throw new RuntimeException(e);
                 }
@@ -128,6 +152,16 @@ public class ComicActivity extends AppCompatActivity {
             }
         }
         return super.dispatchKeyEvent(event);
+    }
+
+
+    public void prepare_pages(int n) throws InterruptedException {
+        for (var i = epub_book_page + 2; i < epub_book_page + 2 + n; i++) {
+            if (i >= epub_book.total_pages()) {
+                return;
+            }
+            taskQueue.put(i);
+        }
     }
 
     public void show_epub_page(WebView view, String html) {
@@ -193,6 +227,7 @@ public class ComicActivity extends AppCompatActivity {
             try {
                 new ReadEpubLeft().execute();
                 new ReadEpubRight().execute();
+                prepare_pages(5);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

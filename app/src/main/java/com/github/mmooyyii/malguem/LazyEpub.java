@@ -1,40 +1,29 @@
 package com.github.mmooyyii.malguem;
 
-import android.os.Build;
 import android.util.Log;
-import android.util.Pair;
 
 import org.jsoup.Jsoup;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
-import org.xml.sax.SAXException;
 
-import java.io.File;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.Inflater;
-import java.util.zip.InflaterInputStream;
 
 import javax.xml.parsers.DocumentBuilderFactory;
-import javax.xml.parsers.ParserConfigurationException;
-
-import io.documentnode.epub4j.domain.Resource;
 
 public class LazyEpub {
     private static final int EOCD_SIGNATURE = 0x06054b50;
     private static final int CENTRAL_DIR_SIGNATURE = 0x02014b50;
-
     private static final int LOCAL_HEADER_SIGNATURE = 0x04034b50;
 
     String title;
@@ -43,11 +32,10 @@ public class LazyEpub {
     // resource map
     List<String> contents; // page -> html
 
-    HashMap<String, byte[]> resource; // name -> html
+    ConcurrentHashMap<String, byte[]> resource; // name -> html
+    ConcurrentHashMap<String, String> resource_type; // name -> media_type name
 
-    HashMap<String, String> resource_type; // name -> media_type name
-
-    Map<String, CentralDirEntry> zip_dir; // page -> (offset,size)
+    ConcurrentHashMap<String, CentralDirEntry> zip_dir; // page -> (offset,size)
 
     Integer centralDirOffset;
     Integer centralDirSize;
@@ -58,9 +46,9 @@ public class LazyEpub {
         uri = epub_uri;
         file = client;
         contents = new ArrayList<>();
-        resource = new HashMap<>();
-        zip_dir = new HashMap<>();
-        resource_type = new HashMap<>();
+        resource = new ConcurrentHashMap<>();
+        zip_dir = new ConcurrentHashMap<>();
+        resource_type = new ConcurrentHashMap<>();
         init_epub_dir();
     }
 
@@ -95,6 +83,25 @@ public class LazyEpub {
         }
     }
 
+    public void prepare_page(int page) {
+        try {
+            var filename = contents.get(page);
+            var html = new String(load_file(filename), "UTF-8");
+            var doc = Jsoup.parse(html);
+            for (var script : doc.select("script[src]")) {
+                load_file(script.attr("src"));
+            }
+            for (var link : doc.select("link[href]")) {
+                load_file(link.attr("href"));
+            }
+            for (var img : doc.select("img[src]")) {
+                load_file(img.attr("src"));
+            }
+        } catch (Exception ignored) {
+
+        }
+    }
+
     public int total_pages() {
         return contents.size();
     }
@@ -124,7 +131,6 @@ public class LazyEpub {
     }
 
     public void initCentralDirectory(byte[] centralDirData) {
-        zip_dir = new HashMap<>();
         int position = 0;
         while (position < centralDirData.length) {
             // 校验中央目录条目签名
