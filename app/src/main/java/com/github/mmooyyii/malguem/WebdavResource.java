@@ -1,11 +1,17 @@
 package com.github.mmooyyii.malguem;
 
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ObjectInput;
+import java.io.ObjectOutput;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
@@ -21,16 +27,17 @@ import okhttp3.Request;
 import okhttp3.Response;
 
 public class WebdavResource implements ResourceInterface {
-    String _url;
-    String _username;
-    String _password;
+    String url;
+    String username;
+    String password;
 
     private final OkHttpClient client = new OkHttpClient();
 
+
     WebdavResource(String url, String username, String passwd) {
-        _url = url;
-        _username = username;
-        _password = passwd;
+        this.url = url;
+        this.username = username;
+        this.password = passwd;
     }
 
     public static String url_decode(String encoded) throws UnsupportedEncodingException {
@@ -43,7 +50,7 @@ public class WebdavResource implements ResourceInterface {
     }
 
     private String make_dir_url(List<String> path) {
-        StringBuilder cur = new StringBuilder(_url);
+        StringBuilder cur = new StringBuilder(url);
         for (var p : path) {
             cur.append("/").append(p);
         }
@@ -55,7 +62,7 @@ public class WebdavResource implements ResourceInterface {
         var dirs = new ArrayList<ListItem>();
         Request request = new Request.Builder().url(make_dir_url(path))
                 .method("PROPFIND", null).addHeader("Depth", "1")
-                .addHeader("Authorization", Credentials.basic(_username, _password))
+                .addHeader("Authorization", Credentials.basic(username, password))
                 .build();
         // 进行解码操作
         try (Response response = client.newCall(request).execute()) {
@@ -84,11 +91,10 @@ public class WebdavResource implements ResourceInterface {
     }
 
     public byte[] open(String uri, final DownloadListener listener) {
-        var url = _url + uri;
         Request request = new Request.
                 Builder().
-                url(url).
-                addHeader("Authorization", Credentials.basic(_username, _password)).
+                url(url + uri).
+                addHeader("Authorization", Credentials.basic(username, password)).
                 build();
 
         final CountDownLatch latch = new CountDownLatch(1);
@@ -98,6 +104,7 @@ public class WebdavResource implements ResourceInterface {
             public void onFailure(Call call, IOException e) {
                 latch.countDown();
             }
+
             @Override
             public void onResponse(Call call, Response response) throws IOException {
                 if (response.isSuccessful()) {
@@ -129,6 +136,16 @@ public class WebdavResource implements ResourceInterface {
             return null;
         }
         return bos.toByteArray();
+    }
+
+    @Override
+    public String to_json() {
+        var map = new HashMap<String, String>();
+        map.put("url", url);
+        map.put("username", username);
+        map.put("passwd", password);
+        Gson gson = new Gson();
+        return gson.toJson(map);
     }
 }
 

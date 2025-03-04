@@ -23,7 +23,7 @@ public class MainActivity extends AppCompatActivity {
 
     private FileListAdapter fileListAdapter;
 
-    WebdavResource client;
+    ResourceInterface client;
     int current_resource_id;
     List<String> pwd;
 
@@ -105,9 +105,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                     intent.putExtra("resource_id", file.id);
                     intent.putExtra("book_uri", make_uri(file.name));
-                    intent.putExtra("url", client._url);
-                    intent.putExtra("username", client._username);
-                    intent.putExtra("passwd", client._password);
+                    intent.putExtra("client", client.to_json());
                     startActivity(intent);
                     break;
                 }

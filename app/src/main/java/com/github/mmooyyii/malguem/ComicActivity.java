@@ -32,7 +32,7 @@ public class ComicActivity extends AppCompatActivity {
 
     String book_uri;
 
-    WebdavResource client;
+    ResourceInterface client;
 
     private AlertDialog progressDialog;
 
@@ -75,12 +75,7 @@ public class ComicActivity extends AppCompatActivity {
         var intent = getIntent();
         resource_id = intent.getIntExtra("resource_id", 1);
         book_uri = intent.getStringExtra("book_uri");
-        client = new WebdavResource(
-                getIntent().getStringExtra("url"),
-                getIntent().getStringExtra("username"),
-                getIntent().getStringExtra("passwd")
-        );
-
+        client = ResourceInterface.from_json(intent.getStringExtra("client"));
         LayoutInflater inflater = LayoutInflater.from(this);
         var dialogView = inflater.inflate(R.layout.progress_bar, null);
 
