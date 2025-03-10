@@ -194,7 +194,7 @@ public class ComicActivity extends AppCompatActivity {
                 var snapshot = diskCache.get(key);
                 if (snapshot != null) {
                     try (var inputStream = snapshot.getInputStream(0)) {
-
+                        progressMessageTextView.setText("解析epub中");
                         return new Epub(DiskCache.readAll(inputStream));
                     } finally {
                         snapshot.close();
@@ -210,6 +210,7 @@ public class ComicActivity extends AppCompatActivity {
                     DiskCache.copy(new ByteArrayInputStream(raw), outputStream);
                     editor.commit(); // 提交写入
                 }
+                progressMessageTextView.setText("解析epub中");
                 return new Epub(raw);
             } catch (IOException e) {
                 return null;

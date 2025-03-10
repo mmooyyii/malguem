@@ -139,6 +139,7 @@ public class NovelActivity extends AppCompatActivity {
             super.onPreExecute();
             // 显示 ProgressDialog
             progressDialog.show();
+            progressMessageTextView.setText("正在打开epub");
         }
 
         @Override
@@ -149,11 +150,13 @@ public class NovelActivity extends AppCompatActivity {
                 var snapshot = diskCache.get(key);
                 if (snapshot != null) {
                     try (var inputStream = snapshot.getInputStream(0)) {
+                        progressMessageTextView.setText("解析epub中");
                         return new Epub(DiskCache.readAll(inputStream));
                     } finally {
                         snapshot.close();
                     }
                 }
+
                 var raw = client.open(book_uri, (current_bytes, total_bytes) -> publishProgress((int) current_bytes, (int) total_bytes));
                 if (raw == null) {
                     return null;
@@ -164,6 +167,7 @@ public class NovelActivity extends AppCompatActivity {
                     DiskCache.copy(new ByteArrayInputStream(raw), outputStream);
                     editor.commit(); // 提交写入
                 }
+                progressMessageTextView.setText("解析epub中");
                 return new Epub(raw);
             } catch (IOException e) {
                 return null;

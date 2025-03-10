@@ -36,11 +36,9 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".NovelActivity"
-            android:process=":webview_process" />
+            android:name=".NovelActivity" />
         <activity
-            android:name=".ComicActivity"
-            android:process=":webview_process" />
+            android:name=".ComicActivity" />
     </application>
 
 </manifest>
