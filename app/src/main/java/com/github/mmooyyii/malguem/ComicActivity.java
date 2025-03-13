@@ -1,6 +1,8 @@
 package com.github.mmooyyii.malguem;
 
 
+import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.view.KeyEvent;
@@ -18,15 +20,23 @@ import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.text.DecimalFormat;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.LinkedBlockingQueue;
 
 
 public class ComicActivity extends AppCompatActivity {
+
+    private BlockingQueue<Integer> taskQueue = new LinkedBlockingQueue<>();
+    private ExecutorService executor = Executors.newFixedThreadPool(1);
 
     private WebView ComicViewLeft;
     private WebView ComicViewRight;
 
     private TextView pageView;
-    Epub epub_book;
+    Book epub_book;
     int epub_book_page;
     int resource_id;
 
@@ -78,13 +88,23 @@ public class ComicActivity extends AppCompatActivity {
         client = ResourceInterface.from_json(intent.getStringExtra("client"));
         LayoutInflater inflater = LayoutInflater.from(this);
         var dialogView = inflater.inflate(R.layout.progress_bar, null);
-
         // 创建 AlertDialog 并设置自定义布局
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
         builder.setView(dialogView);
         builder.setCancelable(false);
         progressDialog = builder.create();
         new ComicActivity.ReadEpub(dialogView).execute();
+        executor.submit(() -> {
+            try {
+                while (!Thread.currentThread().isInterrupted()) {  // 检查中断状态
+                    var n = taskQueue.take();
+                    epub_book.prepare(n);
+                }
+            } catch (InterruptedException e) {
+                // 线程被中断时自动退出循环
+                Thread.currentThread().interrupt();  // 重置中断标志
+            }
+        });
     }
 
     @Override
@@ -95,6 +115,7 @@ public class ComicActivity extends AppCompatActivity {
 
     @Override
     protected void onDestroy() {
+        executor.shutdownNow();
         var db = Database.getInstance(this).getDatabase();
         db.save_history(resource_id, book_uri, epub_book_page, 0);
         super.onDestroy();
@@ -103,13 +124,15 @@ public class ComicActivity extends AppCompatActivity {
         System.exit(0);
     }
 
-    public void show_epub_page(WebView view, int page) {
-        if (page >= epub_book.total_pages()) {
-            view.scrollTo(0, 0);
-            view.loadDataWithBaseURL("file:///android_asset/", "", "text/html", "UTF-8", null);
-            view.setVisibility(android.view.View.VISIBLE);
-            return;
-        }
+    public void show_epub_page(WebView view, int page) throws Exception {
+        prepare_pages(5);
+        final CountDownLatch latch = new CountDownLatch(1);
+        new Thread(() -> {
+            // 执行同步 HTTP 请求（示例使用 HttpURLConnection）
+            epub_book.prepare(page);
+            latch.countDown();
+        }).start();
+        latch.await();
         var html = epub_book.page(page);
         view.scrollTo(0, 0);
         view.setWebViewClient(new WebViewClient() {
@@ -122,16 +145,13 @@ public class ComicActivity extends AppCompatActivity {
                 if (!req.isEmpty() && req.charAt(0) == '/') {
                     req = req.substring(1);
                 }
-                if (epub_book.resource_map().containsKey(req)) {
-                    var r = epub_book.resource_map().get(req);
-                    assert r != null;
-                    try {
-                        return new WebResourceResponse(r.getMediaType().getName(), "UTF-8", r.getInputStream());
-                    } catch (IOException e) {
-                        return super.shouldInterceptRequest(view, request);
-                    }
+                try {
+                    var file = epub_book.GetResource(req);
+                    var type = epub_book.GetMediaType(req);
+                    return new WebResourceResponse(type, "UTF-8", new ByteArrayInputStream(file));
+                } catch (Exception e) {
+                    return super.shouldInterceptRequest(view, request);
                 }
-                return super.shouldInterceptRequest(view, request);
             }
         });
         view.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
@@ -166,8 +186,16 @@ public class ComicActivity extends AppCompatActivity {
         return super.dispatchKeyEvent(event);
     }
 
+    public void prepare_pages(int n) throws InterruptedException {
+        for (var i = epub_book_page + 2; i < epub_book_page + 2 + n; i++) {
+            if (i >= epub_book.total_pages()) {
+                return;
+            }
+            taskQueue.put(i);
+        }
+    }
 
-    private class ReadEpub extends AsyncTask<String, Integer, Epub> {
+    private class ReadEpub extends AsyncTask<String, Integer, Book> {
 
         private final TextView progressMessageTextView;
 
@@ -187,46 +215,57 @@ public class ComicActivity extends AppCompatActivity {
         }
 
         @Override
-        protected Epub doInBackground(String... params) {
-            try {
-                String key = DiskCache.generateKey(book_uri);
-                var diskCache = DiskCache.getInstance(ComicActivity.this).getCache();
-                var snapshot = diskCache.get(key);
-                if (snapshot != null) {
-                    try (var inputStream = snapshot.getInputStream(0)) {
-                        progressMessageTextView.setText("解析epub中");
-                        return new Epub(DiskCache.readAll(inputStream));
-                    } finally {
-                        snapshot.close();
-                    }
+        protected Book doInBackground(String... params) {
+            var db = Database.getInstance(ComicActivity.this).getDatabase();
+            epub_book_page = db.get_epub_info(resource_id, book_uri).current_page;
+            SharedPreferences sharedPref = ComicActivity.this.getSharedPreferences("config", Context.MODE_PRIVATE);
+            var is_stream = sharedPref.getBoolean("epub_stream", false);
+            if (is_stream) {
+                try {
+                    var book = new LazyEpub(book_uri, client);
+                    return book;
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
                 }
-                var raw = client.open(book_uri, (current_bytes, total_bytes) -> publishProgress((int) current_bytes, (int) total_bytes));
-                if (raw == null) {
+            } else {
+                try {
+                    String key = DiskCache.generateKey(book_uri);
+                    var diskCache = DiskCache.getInstance(ComicActivity.this).getCache();
+                    var snapshot = diskCache.get(key);
+                    if (snapshot != null) {
+                        try (var inputStream = snapshot.getInputStream(0)) {
+                            progressMessageTextView.setText("解析epub中");
+                            return new Epub(DiskCache.readAll(inputStream));
+                        } finally {
+                            snapshot.close();
+                        }
+                    }
+                    var raw = client.open(book_uri, (current_bytes, total_bytes) -> publishProgress((int) current_bytes, (int) total_bytes));
+                    if (raw == null) {
+                        return null;
+                    }
+                    var editor = diskCache.edit(key);
+                    if (editor != null) {
+                        OutputStream outputStream = editor.newOutputStream(0);
+                        DiskCache.copy(new ByteArrayInputStream(raw), outputStream);
+                        editor.commit(); // 提交写入
+                    }
+                    progressMessageTextView.setText("解析epub中");
+                    return new Epub(raw);
+                } catch (IOException e) {
                     return null;
                 }
-                var editor = diskCache.edit(key);
-                if (editor != null) {
-                    OutputStream outputStream = editor.newOutputStream(0);
-                    DiskCache.copy(new ByteArrayInputStream(raw), outputStream);
-                    editor.commit(); // 提交写入
-                }
-                progressMessageTextView.setText("解析epub中");
-                return new Epub(raw);
-            } catch (IOException e) {
-                return null;
             }
         }
 
         @Override
-        protected void onPostExecute(Epub book) {
+        protected void onPostExecute(Book book) {
             progressDialog.dismiss();
             if (book == null) {
                 android.widget.Toast.makeText(ComicActivity.this, "打开epub失败", android.widget.Toast.LENGTH_LONG).show();
                 return;
             }
-            var db = Database.getInstance(ComicActivity.this).getDatabase();
             epub_book = book;
-            epub_book_page = db.get_epub_info(resource_id, book_uri).current_page;
             try {
                 show_epub_page(ComicViewLeft, epub_book_page);
                 show_epub_page(ComicViewRight, epub_book_page + 1);
@@ -244,4 +283,6 @@ public class ComicActivity extends AppCompatActivity {
             progressMessageTextView.setText("已完成 " + a + " MB / " + b + "MB");
         }
     }
+
+
 }

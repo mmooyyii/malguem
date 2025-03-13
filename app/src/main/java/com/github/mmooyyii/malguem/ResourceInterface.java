@@ -24,5 +24,9 @@ interface ResourceInterface {
         HashMap<String, String> map = gson.fromJson(json, type);
         return new WebdavResource(map.get("url"), map.get("username"), map.get("passwd"));
     }
+
+    byte[] open(String uri, Slice slice) throws Exception;
+
+    HashMap<Slice, byte[]> open(String uri, List<Slice> slice) throws Exception;
 }
 

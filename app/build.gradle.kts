@@ -12,7 +12,7 @@ android {
 
     defaultConfig {
         applicationId = "com.github.mmooyyii.malguem"
-        minSdk = 23
+        minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
@@ -44,5 +44,5 @@ dependencies {
         exclude(group = "xmlpull")
     }
     implementation(libs.disklrucache)
-
+    implementation(libs.jsoup)
 }

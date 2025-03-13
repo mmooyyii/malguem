@@ -5,13 +5,12 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 
-import io.documentnode.epub4j.domain.Book;
 import io.documentnode.epub4j.domain.Resource;
 import io.documentnode.epub4j.epub.EpubReader;
 
-public class Epub {
+public class Epub implements Book {
 
-    Book book;
+    io.documentnode.epub4j.domain.Book book;
     List<Resource> contents;
 
 
@@ -32,11 +31,24 @@ public class Epub {
         }
     }
 
+    @Override
+    public void prepare(int page) {
+    }
+
+
     public int total_pages() {
         return contents.size();
     }
 
     public Map<String, Resource> resource_map() {
         return book.getResources().getResourceMap();
+    }
+
+    public byte[] GetResource(String filename) throws IOException {
+        return book.getResources().getResourceMap().get(filename).getData();
+    }
+
+    public String GetMediaType(String filename) {
+        return book.getResources().getResourceMap().get(filename).getMediaType().getName();
     }
 }

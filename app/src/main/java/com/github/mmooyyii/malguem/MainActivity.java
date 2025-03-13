@@ -47,11 +47,12 @@ public class MainActivity extends AppCompatActivity {
         fileListView.setOnItemLongClickListener((parent, view, position, id) -> {
             var file = fileListAdapter.getItem(position);
             assert file != null;
-            if (file.type == ListItem.FileType.Resource && position != fileListAdapter.getCount() - 1) {
+            if (file.type == ListItem.FileType.Resource) {
                 showDeleteConfirmationDialog(file.id);
             } else if (file.type == ListItem.FileType.Epub) {
                 var db = Database.getInstance(this).getDatabase();
                 db.switch_view_type(file.id, make_uri(file.name));
+//                fileListAdapter.notifyDataSetChanged();
                 new FetchFileListTask().execute();
             }
             return true;
@@ -61,6 +62,20 @@ public class MainActivity extends AppCompatActivity {
             var file = fileListAdapter.getItem(position);
             assert file != null;
             switch (file.type) {
+                case UseEpubStream: {
+                    SharedPreferences sharedPref = this.getSharedPreferences("config", Context.MODE_PRIVATE);
+                    var is_stream = sharedPref.getBoolean("epub_stream", false);
+                    SharedPreferences.Editor editor = sharedPref.edit();
+                    editor.putBoolean("epub_stream", !is_stream);
+                    editor.apply();
+                    if (is_stream) {
+                        file.name = "使用流式epub(实验)";
+                    } else {
+                        file.name = "使用预加载epub(稳定)";
+                    }
+                    fileListAdapter.notifyDataSetChanged();
+                    break;
+                }
                 case ClearCache: {
                     try {
                         DiskCache.getInstance(MainActivity.this).getCache().delete();
@@ -231,6 +246,13 @@ public class MainActivity extends AppCompatActivity {
         fileListAdapter.addAll(new ListItem(0, "新增webdav", ListItem.FileType.AddWebDav));
         fileListAdapter.addAll(new ListItem(0, "设置缓存", ListItem.FileType.SetCache));
         fileListAdapter.addAll(new ListItem(0, "清除缓存", ListItem.FileType.ClearCache));
+        SharedPreferences sharedPref = this.getSharedPreferences("config", Context.MODE_PRIVATE);
+        var is_stream = sharedPref.getBoolean("epub_stream", false);
+        if (is_stream) {
+            fileListAdapter.addAll(new ListItem(0, "使用预加载epub(稳定)", ListItem.FileType.UseEpubStream));
+        } else {
+            fileListAdapter.addAll(new ListItem(0, "使用流式epub(实验)", ListItem.FileType.UseEpubStream));
+        }
         fileListAdapter.notifyDataSetChanged();
     }
 

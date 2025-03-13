@@ -11,9 +11,11 @@ import java.io.ObjectOutput;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.StringJoiner;
 import java.util.concurrent.CountDownLatch;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -146,6 +148,119 @@ public class WebdavResource implements ResourceInterface {
         map.put("passwd", password);
         Gson gson = new Gson();
         return gson.toJson(map);
+    }
+
+    public byte[] open(String uri, Slice slice) throws Exception {
+        var slices = new ArrayList<Slice>();
+        slices.add(slice);
+        return open(uri, slices).get(slice);
+    }
+
+    public HashMap<Slice, byte[]> open(String uri, List<Slice> slices) throws Exception {
+        var builder = new Request.Builder().url(url + uri).addHeader("Authorization", Credentials.basic(username, password));
+        var sj = new StringJoiner(",");
+        for (var slice : slices) {
+            sj.add(slice.to_string());
+        }
+        builder.addHeader("Range", "bytes=" + sj);
+        var request = builder.build();
+        try (Response response = client.newCall(request).execute()) {
+            if (response.isSuccessful()) {
+                assert response.body() != null;
+                var bytes = response.body().bytes();
+                if (slices.size() == 1) {
+                    var output = new HashMap<Slice, byte[]>();
+                    output.put(slices.get(0), bytes);
+                    return output;
+                }
+                return SplitMultipleRanges(bytes);
+            }
+        }
+        throw new IOException("http 请求失败, 打不开" + url);
+    }
+
+    public static byte[] convertArrayListToByteArray(ArrayList<Byte> byteList) {
+        byte[] byteArray = new byte[byteList.size()];
+        for (int i = 0; i < byteList.size(); i++) {
+            byteArray[i] = byteList.get(i);
+        }
+        return byteArray;
+    }
+
+    private HashMap<Slice, byte[]> SplitMultipleRanges(byte[] bytes) throws UnsupportedEncodingException {
+        var output = new HashMap<Slice, byte[]>();
+        var buffer = new ArrayList<Byte>();
+        Slice slice = null;
+        var idx = 0;
+        while (idx < bytes.length) {
+            buffer.add(bytes[idx]);
+            ++idx;
+            if (EndsWith(buffer, "\r\n")) {
+                if (StartsWith(buffer, "Content-Range:")) {
+                    slice = extractRange(new String(convertArrayListToByteArray(buffer), "UTF-8"));
+                } else if (StartsWith(buffer, "\r\n") && slice != null) {
+                    output.put(slice, Arrays.copyOfRange(bytes, idx, idx + slice.size));
+                    idx += slice.size;
+                    slice = null;
+                }
+                buffer.clear();
+            }
+        }
+        return output;
+    }
+
+    private static boolean StartsWith(ArrayList<Byte> buffer, String start) {
+        byte[] startBytes = start.getBytes();
+        int bufferSize = buffer.size();
+        int startSize = startBytes.length;
+
+        // 如果 buffer 的长度小于 start 字符串的字节数组长度，肯定不以 start 开头
+        if (bufferSize < startSize) {
+            return false;
+        }
+
+        // 从 buffer 的开头开始比较
+        for (int i = 0; i < startSize; i++) {
+            if (!buffer.get(i).equals((Byte) startBytes[i])) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private Boolean EndsWith(ArrayList<Byte> buffer, String end) {
+        byte[] endBytes = end.getBytes();
+        int bufferSize = buffer.size();
+        int endSize = endBytes.length;
+
+        // 如果 buffer 的长度小于 end 字符串的字节数组长度，肯定不以 end 结尾
+        if (bufferSize < endSize) {
+            return false;
+        }
+        // 从 buffer 的末尾开始比较
+        for (int i = 0; i < endSize; i++) {
+            if (buffer.get(bufferSize - endSize + i) != endBytes[i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+
+    public static Slice extractRange(String contentRange) {
+        // 定义正则表达式模式
+        Pattern pattern = Pattern.compile("bytes (\\d+)-(\\d+)/");
+        Matcher matcher = pattern.matcher(contentRange);
+        if (matcher.find()) {
+            int start = Integer.parseInt(matcher.group(1));
+            int end = Integer.parseInt(matcher.group(2));
+            var slice = new Slice();
+            slice.offset = start;
+            slice.size = end - start + 1;
+            return slice;
+        }
+        return null;
     }
 }
 
