@@ -8,7 +8,7 @@ import io.documentnode.epub4j.domain.Resource;
 public interface Book {
     String page(int page);
 
-    void prepare(int page);
+    void prepare(int from, int to);
 
     int total_pages();
 

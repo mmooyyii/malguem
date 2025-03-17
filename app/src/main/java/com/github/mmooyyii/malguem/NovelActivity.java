@@ -39,7 +39,6 @@ public class NovelActivity extends AppCompatActivity {
 
     private AlertDialog progressDialog;
 
-
     private BlockingQueue<Integer> taskQueue = new LinkedBlockingQueue<>();
     private ExecutorService executor = Executors.newFixedThreadPool(1);
 
@@ -64,12 +63,11 @@ public class NovelActivity extends AppCompatActivity {
         builder.setCancelable(false);
         progressDialog = builder.create();
         new ReadEpub(dialogView).execute();
-
         executor.submit(() -> {
             try {
                 while (!Thread.currentThread().isInterrupted()) {  // 检查中断状态
                     var n = taskQueue.take();
-                    epub_book.prepare(n);
+                    epub_book.prepare(n, n + 1);
                 }
             } catch (InterruptedException e) {
                 // 线程被中断时自动退出循环
@@ -102,14 +100,14 @@ public class NovelActivity extends AppCompatActivity {
         }
     }
 
-    public void show_epub_page(int page, int page_offset) throws Exception {
-        prepare_pages(5);
+    public void show_new_page(int page, int page_offset) throws Exception {
         final CountDownLatch latch = new CountDownLatch(1);
         new Thread(() -> {
             // 执行同步 HTTP 请求（示例使用 HttpURLConnection）
-            epub_book.prepare(page);
+            epub_book.prepare(page, page + 1);
             latch.countDown();
         }).start();
+        prepare_pages(5);
         latch.await();
         var html = epub_book.page(page);
         novelView.setWebViewClient(new WebViewClient() {
@@ -133,7 +131,6 @@ public class NovelActivity extends AppCompatActivity {
         });
         novelView.scrollTo(0, page_offset);
         novelView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
-        pageView.setText((page + 1) + "/" + epub_book.total_pages());
     }
 
     @Override
@@ -143,20 +140,25 @@ public class NovelActivity extends AppCompatActivity {
         boolean page_changed = false;
         if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
             page_changed = true;
-            epub_book_page -= 1;
+            epub_book_page = Math.max(0, epub_book_page - 1);
         } else if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
             page_changed = true;
-            epub_book_page += 1;
+            epub_book_page = Math.min(epub_book.total_pages() - 1, epub_book_page + 1);
         }
         if (page_changed) {
-            try {
-                show_epub_page(epub_book_page, 0);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+            notifyPageChanged(0);
             return true;
         }
         return super.dispatchKeyEvent(event);
+    }
+
+    private void notifyPageChanged(int page_offset) {
+        try {
+            show_new_page(epub_book_page, page_offset);
+            pageView.setText((epub_book_page + 1) + "/" + epub_book.total_pages());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
     private class ReadEpub extends AsyncTask<String, Integer, Book> {
@@ -233,11 +235,7 @@ public class NovelActivity extends AppCompatActivity {
             var info = db.get_epub_info(resource_id, book_uri);
             epub_book = book;
             epub_book_page = info.current_page;
-            try {
-                show_epub_page(epub_book_page, info.page_offset);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+            notifyPageChanged(info.page_offset);
         }
 
         @Override

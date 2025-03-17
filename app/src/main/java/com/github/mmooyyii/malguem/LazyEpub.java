@@ -15,6 +15,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.Inflater;
@@ -35,6 +36,7 @@ public class LazyEpub implements Book {
     ConcurrentHashMap<String, byte[]> resource; // name -> html
     ConcurrentHashMap<String, String> resource_type; // name -> media_type name
     ConcurrentHashMap<String, CentralDirEntry> zip_dir; // page -> (offset,size)
+
 
     Integer centralDirOffset;
     Integer centralDirSize;
@@ -63,9 +65,9 @@ public class LazyEpub implements Book {
         initContent();
     }
 
-    public String page(int page) {
+    public String page(int page_num) {
         try {
-            var filename = contents.get(page);
+            var filename = contents.get(page_num);
             var html = new String(load_file(filename), "UTF-8");
             var doc = Jsoup.parse(html);
             var files = new ArrayList<String>();
@@ -82,28 +84,32 @@ public class LazyEpub implements Book {
             return html;
         } catch (Exception e) {
             throw new RuntimeException(e);
-//            return "无法读取页面";
         }
     }
 
     @Override
-    public void prepare(int page) {
+    public void prepare(int from, int to) {
+        var files = new ArrayList<String>();
+        for (var page_num = from; page_num < to; ++page_num) {
+            try {
+                var filename = contents.get(page_num);
+                var html = new String(load_file(filename), "UTF-8");
+                var doc = Jsoup.parse(html);
+                for (var script : doc.select("script[src]")) {
+                    files.add(script.attr("src"));
+                }
+                for (var link : doc.select("link[href]")) {
+                    files.add(link.attr("href"));
+                }
+                for (var img : doc.select("img[src]")) {
+                    files.add(img.attr("src"));
+                }
+            } catch (Exception ignore) {
+            }
+        }
         try {
-            var filename = contents.get(page);
-            var html = new String(load_file(filename), "UTF-8");
-            var doc = Jsoup.parse(html);
-            var files = new ArrayList<String>();
-            for (var script : doc.select("script[src]")) {
-                files.add(script.attr("src"));
-            }
-            for (var link : doc.select("link[href]")) {
-                files.add(link.attr("href"));
-            }
-            for (var img : doc.select("img[src]")) {
-                files.add(img.attr("src"));
-            }
             load_file_to_cache(files);
-        } catch (Exception ignored) {
+        } catch (Exception ignore) {
         }
     }
 
@@ -144,7 +150,7 @@ public class LazyEpub implements Book {
         throw new IllegalArgumentException("EOCD signature not found");
     }
 
-    public void initCentralDirectory(byte[] centralDirData) {
+    private void initCentralDirectory(byte[] centralDirData) {
         int position = 0;
         while (position < centralDirData.length) {
             // 校验中央目录条目签名
@@ -214,10 +220,6 @@ public class LazyEpub implements Book {
             String idref = spineItems.item(i).getAttributes().getNamedItem("idref").getNodeValue();
             contents.add(id_to_path.get(idref));
         }
-    }
-
-    public boolean is_file_exist(String filename) {
-        return zip_dir.containsKey(filename);
     }
 
     private void initCompressedOffset() throws Exception {

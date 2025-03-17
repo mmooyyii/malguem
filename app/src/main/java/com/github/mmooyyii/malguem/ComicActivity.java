@@ -5,6 +5,7 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.util.Pair;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.webkit.WebResourceRequest;
@@ -29,7 +30,7 @@ import java.util.concurrent.LinkedBlockingQueue;
 
 public class ComicActivity extends AppCompatActivity {
 
-    private BlockingQueue<Integer> taskQueue = new LinkedBlockingQueue<>();
+    private BlockingQueue<Pair<Integer, Integer>> taskQueue = new LinkedBlockingQueue<>();
     private ExecutorService executor = Executors.newFixedThreadPool(1);
 
     private WebView ComicViewLeft;
@@ -98,7 +99,7 @@ public class ComicActivity extends AppCompatActivity {
             try {
                 while (!Thread.currentThread().isInterrupted()) {  // 检查中断状态
                     var n = taskQueue.take();
-                    epub_book.prepare(n);
+                    epub_book.prepare(n.first, n.second);
                 }
             } catch (InterruptedException e) {
                 // 线程被中断时自动退出循环
@@ -124,12 +125,11 @@ public class ComicActivity extends AppCompatActivity {
         System.exit(0);
     }
 
-    public void show_epub_page(WebView view, int page) throws Exception {
+    public void show_new_page(WebView view, int page) throws Exception {
         prepare_pages(5);
         final CountDownLatch latch = new CountDownLatch(1);
         new Thread(() -> {
-            // 执行同步 HTTP 请求（示例使用 HttpURLConnection）
-            epub_book.prepare(page);
+            epub_book.prepare(page, page + 1);
             latch.countDown();
         }).start();
         latch.await();
@@ -155,43 +155,42 @@ public class ComicActivity extends AppCompatActivity {
             }
         });
         view.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
-        pageView.setText((page + 1) + "/" + epub_book.total_pages());
     }
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
         int keyCode = event.getKeyCode();
         int action = event.getAction();
-        if (action == KeyEvent.ACTION_DOWN) {
-            if (keyCode == KeyEvent.KEYCODE_DPAD_LEFT && epub_book_page > 0) {
-                epub_book_page -= 2;
-                try {
-                    show_epub_page(ComicViewLeft, epub_book_page);
-                    show_epub_page(ComicViewRight, epub_book_page + 1);
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-                return true;
-            } else if ((keyCode == KeyEvent.KEYCODE_DPAD_RIGHT && epub_book_page + 2 < epub_book.total_pages())) {
-                epub_book_page += 2;
-                try {
-                    show_epub_page(ComicViewLeft, epub_book_page);
-                    show_epub_page(ComicViewRight, epub_book_page + 1);
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-                return true;
-            }
+        boolean page_changed = false;
+        if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
+            epub_book_page = Math.max(0, epub_book_page - 2);
+            page_changed = true;
+        } else if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            epub_book_page = Math.min(epub_book.total_pages() - 2, epub_book_page + 2);
+            page_changed = true;
+        }
+        if (page_changed) {
+            notifyPageChanged();
+            return true;
         }
         return super.dispatchKeyEvent(event);
     }
 
+    private void notifyPageChanged() {
+        try {
+            show_new_page(ComicViewLeft, epub_book_page);
+            show_new_page(ComicViewRight, epub_book_page + 1);
+            pageView.setText((epub_book_page + 1) + "/" + epub_book.total_pages());
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+
     public void prepare_pages(int n) throws InterruptedException {
-        for (var i = epub_book_page + 2; i < epub_book_page + 2 + n; i++) {
-            if (i >= epub_book.total_pages()) {
-                return;
-            }
-            taskQueue.put(i);
+        var from = Math.min(epub_book_page + 2, epub_book.total_pages());
+        var to = Math.min(epub_book_page + 2 + n, epub_book.total_pages());
+        if (from < to) {
+            taskQueue.put(Pair.create(from, to));
         }
     }
 
@@ -266,12 +265,7 @@ public class ComicActivity extends AppCompatActivity {
                 return;
             }
             epub_book = book;
-            try {
-                show_epub_page(ComicViewLeft, epub_book_page);
-                show_epub_page(ComicViewRight, epub_book_page + 1);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+            notifyPageChanged();
         }
 
         @Override

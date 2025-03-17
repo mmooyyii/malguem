@@ -32,7 +32,8 @@ public class Epub implements Book {
     }
 
     @Override
-    public void prepare(int page) {
+    public void prepare(int from, int to) {
+
     }
 
 
