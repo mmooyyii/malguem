@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.Inflater;
@@ -64,25 +65,13 @@ public class LazyEpub implements Book {
     }
 
     public String page(int page_num) {
-        try {
-            var filename = contents.get(page_num);
-            var html = new String(load_file(filename), StandardCharsets.UTF_8);
-            var doc = Jsoup.parse(html);
-            var files = new ArrayList<String>();
-            for (var script : doc.select("script[src]")) {
-                files.add(script.attr("src"));
-            }
-            for (var link : doc.select("link[href]")) {
-                files.add(link.attr("href"));
-            }
-            for (var img : doc.select("img[src]")) {
-                files.add(img.attr("src"));
-            }
-            load_file_to_cache(files);
-            return html;
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+        var filename = contents.get(page_num);
+        filename = cut(filename);
+        if (resource.containsKey(filename)) {
+            var html = resource.get(filename);
+            return new String(html, StandardCharsets.UTF_8);
         }
+        return "无法读取html";
     }
 
     @Override
@@ -93,6 +82,7 @@ public class LazyEpub implements Book {
                 var filename = contents.get(page_num);
                 var html = new String(load_file(filename), StandardCharsets.UTF_8);
                 var doc = Jsoup.parse(html);
+                // 这里怎么才能一次性写好呢?
                 for (var script : doc.select("script[src]")) {
                     files.add(script.attr("src"));
                 }
@@ -101,6 +91,9 @@ public class LazyEpub implements Book {
                 }
                 for (var img : doc.select("img[src]")) {
                     files.add(img.attr("src"));
+                }
+                for (var image : doc.select("image")) {
+                    files.add(image.attr("xlink:href"));
                 }
             } catch (Exception ignore) {
             }
