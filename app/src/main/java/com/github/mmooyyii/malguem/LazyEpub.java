@@ -92,7 +92,7 @@ public class LazyEpub implements Book {
                 for (var img : doc.select("img[src]")) {
                     files.add(img.attr("src"));
                 }
-                for (var image : doc.select("image")) {
+                for (var image : doc.select("image[xlink:href]")) {
                     files.add(image.attr("xlink:href"));
                 }
             } catch (Exception ignore) {
