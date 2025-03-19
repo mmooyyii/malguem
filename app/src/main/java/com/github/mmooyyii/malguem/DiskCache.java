@@ -10,7 +10,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.io.UnsupportedEncodingException;
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
@@ -23,8 +23,11 @@ public class DiskCache {
 
     private DiskCache(Context context) throws IOException {
         File cacheDir = new File(context.getCacheDir(), "file_cache");
-        if (!cacheDir.exists()) cacheDir.mkdirs();
-
+        if (!cacheDir.exists()) {
+            if (!cacheDir.mkdirs()) {
+                throw new RuntimeException("无法创建文件夹");
+            }
+        }
         SharedPreferences sharedPref = context.getSharedPreferences("config", Context.MODE_PRIVATE);
         int maxSize = sharedPref.getInt("max_local_cache_size", 5 * 1024) * 1024 * 1024;
         if (maxSize <= 0) {
@@ -47,15 +50,14 @@ public class DiskCache {
     public static String generateKey(String url) {
         try {
             MessageDigest md = MessageDigest.getInstance("MD5");
-            md.update(url.getBytes("UTF-8"));
+            md.update(url.getBytes(StandardCharsets.UTF_8));
             byte[] digest = md.digest();
             StringBuilder sb = new StringBuilder();
             for (byte b : digest) {
                 sb.append(String.format("%02x", b & 0xff));
             }
             return sb.toString();
-        } catch (UnsupportedEncodingException | NoSuchAlgorithmException e) {
-            e.printStackTrace();
+        } catch (NoSuchAlgorithmException e) {
             return String.valueOf(url.hashCode());
         }
     }

@@ -3,7 +3,7 @@ package com.github.mmooyyii.malguem;
 
 public class ListItem {
 
-    enum FileType {
+    public enum FileType {
         Resource, Dir, Epub, AddWebDav, SetCache, ClearCache, UseEpubStream
     }
 
@@ -11,7 +11,7 @@ public class ListItem {
         Novel, Comic
     }
 
-    int id = 0;
+    int id;
     String name;
     FileType type;
 

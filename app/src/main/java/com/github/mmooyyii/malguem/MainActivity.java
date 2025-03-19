@@ -1,11 +1,13 @@
 package com.github.mmooyyii.malguem;
 
+import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
-import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.EditText;
@@ -18,6 +20,8 @@ import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.Executors;
 
 
 public class MainActivity extends AppCompatActivity {
@@ -57,8 +61,7 @@ public class MainActivity extends AppCompatActivity {
             } else if (file.type == ListItem.FileType.Epub) {
                 var db = Database.getInstance(this).getDatabase();
                 db.switch_view_type(file.id, make_uri(file.name));
-//                fileListAdapter.notifyDataSetChanged();
-                new FetchFileListTask().execute();
+                new FetchFileListTask().executeTask();
             }
             return true;
         });
@@ -105,13 +108,13 @@ public class MainActivity extends AppCompatActivity {
                     if (client == null) {
                         android.widget.Toast.makeText(MainActivity.this, "数据库异常", Toast.LENGTH_SHORT).show();
                     } else {
-                        new FetchFileListTask().execute();
+                        new FetchFileListTask().executeTask();
                     }
                     break;
                 }
                 case Dir: {
                     pwd.add(file.name);
-                    new FetchFileListTask().execute();
+                    new FetchFileListTask().executeTask();
                     break;
                 }
                 case Epub: {
@@ -161,6 +164,7 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
+    @SuppressLint("SetTextI18n")
     private void showLoginDialog() {
         // 获取布局填充器
         LayoutInflater inflater = getLayoutInflater();
@@ -277,46 +281,46 @@ public class MainActivity extends AppCompatActivity {
             init_resource_list();
         } else {
             pwd.remove(pwd.size() - 1);
-            new FetchFileListTask().execute();
+            new FetchFileListTask().executeTask();
         }
     }
 
-    private class FetchFileListTask extends AsyncTask<Void, Void, List<ListItem>> {
-        @Override
-        protected List<ListItem> doInBackground(Void... params) {
-            at_root_list = false;
-            try {
-                var files = client.ls(current_resource_id, pwd);
+    private class FetchFileListTask {
+        private final Executor executor = Executors.newSingleThreadExecutor();
+        private final Handler handler = new Handler(Looper.getMainLooper());
+
+        public void executeTask() {
+            executor.execute(() -> {
+                at_root_list = false;
+                List<ListItem> fileList;
+                try {
+                    fileList = client.ls(current_resource_id, pwd);
+                } catch (Exception e) {
+                    Toast.makeText(MainActivity.this, "http请求失败", Toast.LENGTH_SHORT).show();
+                    return;
+                }
                 var epubs = new ArrayList<String>();
-                for (var file : files) {
+                for (var file : fileList) {
                     if (file.type == ListItem.FileType.Epub) {
                         epubs.add(make_uri(file.name));
                     }
                 }
                 var db = Database.getInstance(MainActivity.this).getDatabase();
                 var map = db.get_view_types(current_resource_id, epubs);
-                for (var file : files) {
+                for (var file : fileList) {
                     if (file.type == ListItem.FileType.Epub && map.containsKey(make_uri(file.name))) {
                         file.view_type = map.get(make_uri(file.name));
                     }
                 }
-                return files;
-            } catch (Exception e) {
-                return null;
-            }
-        }
-
-        @Override
-        protected void onPostExecute(List<ListItem> fileList) {
-            if (fileList != null) {
-                fileListAdapter.clear();
-                for (var file : fileList) {
-                    fileListAdapter.addAll(file);
-                }
-                fileListAdapter.notifyDataSetChanged();
-            } else {
-                Toast.makeText(MainActivity.this, "http请求失败", Toast.LENGTH_SHORT).show();
-            }
+                final var finalFileList = fileList;
+                handler.post(() -> {
+                    fileListAdapter.clear();
+                    for (var file : finalFileList) {
+                        fileListAdapter.addAll(file);
+                    }
+                    fileListAdapter.notifyDataSetChanged();
+                });
+            });
         }
     }
 

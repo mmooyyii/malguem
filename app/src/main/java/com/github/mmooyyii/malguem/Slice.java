@@ -1,6 +1,8 @@
 package com.github.mmooyyii.malguem;
 
-class Slice {
+import java.util.Objects;
+
+public class Slice {
     Integer offset;
     Integer size;
 
@@ -20,8 +22,8 @@ class Slice {
         if (this == o) return true;
         if (o == null || getClass() != o.getClass()) return false;
         Slice slice = (Slice) o;
-        if (offset != null ? !offset.equals(slice.offset) : slice.offset != null) return false;
-        return size != null ? size.equals(slice.size) : slice.size == null;
+        if (!Objects.equals(offset, slice.offset)) return false;
+        return Objects.equals(size, slice.size);
     }
 
     // 重写 hashCode 方法，保证相等的对象有相同的哈希码

@@ -9,6 +9,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
@@ -65,7 +66,7 @@ public class LazyEpub implements Book {
     public String page(int page_num) {
         try {
             var filename = contents.get(page_num);
-            var html = new String(load_file(filename), "UTF-8");
+            var html = new String(load_file(filename), StandardCharsets.UTF_8);
             var doc = Jsoup.parse(html);
             var files = new ArrayList<String>();
             for (var script : doc.select("script[src]")) {
@@ -90,7 +91,7 @@ public class LazyEpub implements Book {
         for (var page_num = from; page_num < to; ++page_num) {
             try {
                 var filename = contents.get(page_num);
-                var html = new String(load_file(filename), "UTF-8");
+                var html = new String(load_file(filename), StandardCharsets.UTF_8);
                 var doc = Jsoup.parse(html);
                 for (var script : doc.select("script[src]")) {
                     files.add(script.attr("src"));
@@ -291,7 +292,9 @@ public class LazyEpub implements Book {
             var slice = kv.getKey();
             var bytes = kv.getValue();
             var filename = slicesToFile.get(slice);
+            assert filename != null;
             var entry = zip_dir.get(filename);
+            assert entry != null;
             if (entry.compressionMethod == 0) {
                 resource.put(filename, bytes);
             } else if (entry.compressionMethod == 8) {

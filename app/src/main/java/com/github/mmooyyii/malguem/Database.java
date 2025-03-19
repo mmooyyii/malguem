@@ -18,7 +18,7 @@ public class Database {
 
 
     private static Database instance;
-    private DatabaseHelper database;
+    private final DatabaseHelper database;
 
     private Database(Context context) {
         database = new DatabaseHelper(context);
@@ -35,7 +35,7 @@ public class Database {
         return database;
     }
 
-    public class DatabaseHelper extends SQLiteOpenHelper {
+    public static class DatabaseHelper extends SQLiteOpenHelper {
 
         // 数据库名称和版本
         private static final String DATABASE_NAME = "malguem.db";
@@ -86,15 +86,16 @@ public class Database {
             var db = getReadableDatabase();
             var cursor = db.query("resource", new String[]{"json_info"}, "id=?", new String[]{String.valueOf(resource_id)}, null, null, null);
             Gson gson = new Gson();
-
             if (cursor.moveToNext()) {
                 var json = cursor.getString(cursor.getColumnIndexOrThrow("json_info"));
                 // 使用 TypeToken 来指定转换的目标类型
                 var type = new TypeToken<HashMap<String, String>>() {
                 }.getType();
                 HashMap<String, String> map = gson.fromJson(json, type);
+                cursor.close();
                 return new WebdavResource(map.get("url"), map.get("username"), map.get("passwd"));
             }
+            cursor.close();
             return null;
         }
 
@@ -144,6 +145,7 @@ public class Database {
                     output.view_type = ListItem.ViewType.Novel;
                 }
             }
+            cursor.close();
             return output;
         }
 
@@ -166,6 +168,7 @@ public class Database {
                     output.put(path, ListItem.ViewType.Novel);
                 }
             }
+            cursor.close();
             return output;
         }
 

@@ -8,7 +8,7 @@ import java.util.HashMap;
 import java.util.List;
 
 
-interface ResourceInterface {
+public interface ResourceInterface {
     List<ListItem> ls(int id, List<String> path) throws Exception;
 
     byte[] open(String url, final DownloadListener listener);

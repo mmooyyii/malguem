@@ -1,3 +1,8 @@
 <resources>
     <string name="app_name">malguem</string>
+    <string name="opening_epub">正在打开epub</string>
+    <string name="parse_epub">解析epub中</string>
+    <string name="load_percent">已完成 %1$s MB / %2$s MB</string>
+    <string name="page">%1$d / %2$d</string>
+    <string name="http_error">http请求失败</string>
 </resources>

@@ -42,8 +42,8 @@ public class NovelActivity extends AppCompatActivity {
 
     private AlertDialog progressDialog;
 
-    private BlockingQueue<Integer> taskQueue = new LinkedBlockingQueue<>();
-    private ExecutorService executor = Executors.newFixedThreadPool(1);
+    private final BlockingQueue<Integer> taskQueue = new LinkedBlockingQueue<>();
+    private final ExecutorService executor = Executors.newFixedThreadPool(1);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -158,7 +158,7 @@ public class NovelActivity extends AppCompatActivity {
     private void notifyPageChanged(int page_offset) {
         try {
             show_new_page(epub_book_page, page_offset);
-            pageView.setText((epub_book_page + 1) + "/" + epub_book.total_pages());
+            pageView.setText(getString(R.string.page, (epub_book_page + 1), epub_book.total_pages()));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -178,7 +178,7 @@ public class NovelActivity extends AppCompatActivity {
             // 对应 onPreExecute
             handler.post(() -> {
                         progressDialog.show();
-                        progressMessageTextView.setText("正在打开epub");
+                        progressMessageTextView.setText(getString(R.string.opening_epub));
                     }
             );
             executor.execute(() -> {
@@ -205,15 +205,14 @@ public class NovelActivity extends AppCompatActivity {
             handler.post(() -> {
                 var a = fmt.format(current / 1024.0 / 1024.0);
                 var b = fmt.format(total / 1024.0 / 1024.0);
-                progressMessageTextView.setText("已完成 " + a + " MB / " + b + "MB");
+                progressMessageTextView.setText(getString(R.string.load_percent, a, b));
             });
         }
 
 
         private Book OpenStreamEpubBackground() {
             try {
-                var book = new LazyEpub(book_uri, client);
-                return book;
+                return new LazyEpub(book_uri, client);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
@@ -226,7 +225,7 @@ public class NovelActivity extends AppCompatActivity {
                 var snapshot = diskCache.get(key);
                 if (snapshot != null) {
                     try (var inputStream = snapshot.getInputStream(0)) {
-                        progressMessageTextView.setText("解析epub中");
+                        progressMessageTextView.setText(getString(R.string.parse_epub));
                         return new Epub(DiskCache.readAll(inputStream));
                     } finally {
                         snapshot.close();
@@ -242,7 +241,7 @@ public class NovelActivity extends AppCompatActivity {
                     DiskCache.copy(new ByteArrayInputStream(raw), outputStream);
                     editor.commit(); // 提交写入
                 }
-                progressMessageTextView.setText("解析epub中");
+                progressMessageTextView.setText(getString(R.string.parse_epub));
                 return new Epub(raw);
             } catch (IOException e) {
                 return null;

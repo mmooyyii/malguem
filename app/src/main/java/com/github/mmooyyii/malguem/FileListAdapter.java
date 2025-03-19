@@ -7,6 +7,8 @@ import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+
 import java.util.Objects;
 
 public class FileListAdapter extends ArrayAdapter<ListItem> {
@@ -15,8 +17,9 @@ public class FileListAdapter extends ArrayAdapter<ListItem> {
         super(context, R.layout.list_item_file);
     }
 
+    @NonNull
     @Override
-    public View getView(int position, View convertView, ViewGroup parent) {
+    public View getView(int position, View convertView, @NonNull ViewGroup parent) {
         if (convertView == null) {
             convertView = LayoutInflater.from(getContext()).inflate(R.layout.list_item_file, parent, false);
         }

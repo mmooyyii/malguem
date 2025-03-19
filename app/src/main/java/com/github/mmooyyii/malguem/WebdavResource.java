@@ -1,5 +1,7 @@
 package com.github.mmooyyii.malguem;
 
+import androidx.annotation.NonNull;
+
 import com.google.gson.Gson;
 
 import java.io.ByteArrayOutputStream;
@@ -7,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -72,9 +75,10 @@ public class WebdavResource implements ResourceInterface {
                 Pattern pattern = Pattern.compile(regex);
                 Matcher matcher = pattern.matcher(responseBody);
                 // 草, 为什么xml解不出来? 先用regex将就一下了.
-                matcher.find(); // 第一个是当前目录去掉它, 虽然我不知道这是不是ub
+                var ignore = matcher.find(); // 第一个是当前目录去掉它, 虽然我不知道这是不是ub
                 while (matcher.find()) {
                     String content = matcher.group(1);
+                    assert content != null;
                     content = url_decode(content);
                     var paths = content.split("/");
                     if (content.endsWith("/")) {
@@ -100,13 +104,14 @@ public class WebdavResource implements ResourceInterface {
         ByteArrayOutputStream bos = new ByteArrayOutputStream();
         client.newCall(request).enqueue(new Callback() {
             @Override
-            public void onFailure(Call call, IOException e) {
+            public void onFailure(@NonNull Call call, @NonNull IOException e) {
                 latch.countDown();
             }
 
             @Override
-            public void onResponse(Call call, Response response) throws IOException {
+            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
                 if (response.isSuccessful()) {
+                    assert response.body() != null;
                     long totalLength = response.body().contentLength();
                     InputStream inputStream = response.body().byteStream();
 
@@ -184,7 +189,7 @@ public class WebdavResource implements ResourceInterface {
         return byteArray;
     }
 
-    private HashMap<Slice, byte[]> SplitMultipleRanges(byte[] bytes) throws UnsupportedEncodingException {
+    private HashMap<Slice, byte[]> SplitMultipleRanges(byte[] bytes) {
         var output = new HashMap<Slice, byte[]>();
         var buffer = new ArrayList<Byte>();
         Slice slice = null;
@@ -192,9 +197,9 @@ public class WebdavResource implements ResourceInterface {
         while (idx < bytes.length) {
             buffer.add(bytes[idx]);
             ++idx;
-            if (EndsWith(buffer, "\r\n")) {
+            if (EndsWithRN(buffer)) {
                 if (StartsWith(buffer, "Content-Range:")) {
-                    slice = extractRange(new String(convertArrayListToByteArray(buffer), "UTF-8"));
+                    slice = extractRange(new String(convertArrayListToByteArray(buffer), StandardCharsets.UTF_8));
                 } else if (StartsWith(buffer, "\r\n") && slice != null) {
                     output.put(slice, Arrays.copyOfRange(bytes, idx, idx + slice.size));
                     idx += slice.size;
@@ -218,7 +223,7 @@ public class WebdavResource implements ResourceInterface {
 
         // 从 buffer 的开头开始比较
         for (int i = 0; i < startSize; i++) {
-            if (!buffer.get(i).equals((Byte) startBytes[i])) {
+            if (!buffer.get(i).equals(startBytes[i])) {
                 return false;
             }
         }
@@ -226,8 +231,8 @@ public class WebdavResource implements ResourceInterface {
         return true;
     }
 
-    private Boolean EndsWith(ArrayList<Byte> buffer, String end) {
-        byte[] endBytes = end.getBytes();
+    private Boolean EndsWithRN(ArrayList<Byte> buffer) {
+        byte[] endBytes = "\r\n".getBytes();
         int bufferSize = buffer.size();
         int endSize = endBytes.length;
 
@@ -250,8 +255,8 @@ public class WebdavResource implements ResourceInterface {
         Pattern pattern = Pattern.compile("bytes (\\d+)-(\\d+)/");
         Matcher matcher = pattern.matcher(contentRange);
         if (matcher.find()) {
-            int start = Integer.parseInt(matcher.group(1));
-            int end = Integer.parseInt(matcher.group(2));
+            int start = Integer.parseInt(Objects.requireNonNull(matcher.group(1)));
+            int end = Integer.parseInt(Objects.requireNonNull(matcher.group(2)));
             var slice = new Slice();
             slice.offset = start;
             slice.size = end - start + 1;
