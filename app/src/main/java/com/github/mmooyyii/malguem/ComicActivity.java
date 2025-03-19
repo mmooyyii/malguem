@@ -13,6 +13,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -261,7 +262,7 @@ public class ComicActivity extends AppCompatActivity {
         protected void onPostExecute(Book book) {
             progressDialog.dismiss();
             if (book == null) {
-                android.widget.Toast.makeText(ComicActivity.this, "打开epub失败", android.widget.Toast.LENGTH_LONG).show();
+                android.widget.Toast.makeText(ComicActivity.this, "打开epub失败", Toast.LENGTH_SHORT).show();
                 return;
             }
             epub_book = book;

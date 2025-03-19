@@ -17,6 +17,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
+import java.time.Instant;
 
 
 public class MainActivity extends AppCompatActivity {
@@ -26,6 +27,10 @@ public class MainActivity extends AppCompatActivity {
     ResourceInterface client;
     int current_resource_id;
     List<String> pwd;
+
+    boolean at_root_list = false;
+
+    long kill_app_countdown = 0;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -98,7 +103,7 @@ public class MainActivity extends AppCompatActivity {
                     client = db.get_webdav(file.id);
                     current_resource_id = file.id;
                     if (client == null) {
-                        android.widget.Toast.makeText(MainActivity.this, "数据库异常", android.widget.Toast.LENGTH_LONG).show();
+                        android.widget.Toast.makeText(MainActivity.this, "数据库异常", Toast.LENGTH_SHORT).show();
                     } else {
                         new FetchFileListTask().execute();
                     }
@@ -238,6 +243,7 @@ public class MainActivity extends AppCompatActivity {
 
 
     public void init_resource_list() {
+        at_root_list = true;
         var db = Database.getInstance(this).getDatabase();
         fileListAdapter.clear();
         for (var file : db.resource_list()) {
@@ -258,7 +264,16 @@ public class MainActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
-        if (pwd.isEmpty()) {
+        if (at_root_list) {
+            var now = Instant.now().toEpochMilli();
+            if (now < kill_app_countdown) {
+                android.os.Process.killProcess(android.os.Process.myPid());
+                System.exit(0);
+            } else {
+                kill_app_countdown = now + 1000;
+                android.widget.Toast.makeText(MainActivity.this, "再按一次返回退出", Toast.LENGTH_SHORT).show();
+            }
+        } else if (pwd.isEmpty()) {
             init_resource_list();
         } else {
             pwd.remove(pwd.size() - 1);
@@ -269,6 +284,7 @@ public class MainActivity extends AppCompatActivity {
     private class FetchFileListTask extends AsyncTask<Void, Void, List<ListItem>> {
         @Override
         protected List<ListItem> doInBackground(Void... params) {
+            at_root_list = false;
             try {
                 var files = client.ls(current_resource_id, pwd);
                 var epubs = new ArrayList<String>();
