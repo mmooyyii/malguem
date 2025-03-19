@@ -4,8 +4,6 @@ package com.github.mmooyyii.malguem;
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
 
-import java.io.Externalizable;
-import java.io.Serializable;
 import java.util.HashMap;
 import java.util.List;
 

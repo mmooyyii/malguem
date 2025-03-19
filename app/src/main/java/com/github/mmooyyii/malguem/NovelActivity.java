@@ -2,8 +2,9 @@ package com.github.mmooyyii.malguem;
 
 import android.content.Context;
 import android.content.SharedPreferences;
-import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.webkit.WebResourceRequest;
@@ -22,6 +23,7 @@ import java.io.OutputStream;
 import java.text.DecimalFormat;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -63,7 +65,7 @@ public class NovelActivity extends AppCompatActivity {
         builder.setView(dialogView);
         builder.setCancelable(false);
         progressDialog = builder.create();
-        new ReadEpub(dialogView).execute();
+        new OpenEpub(dialogView).executeTask();
         executor.submit(() -> {
             try {
                 while (!Thread.currentThread().isInterrupted()) {  // 检查中断状态
@@ -162,90 +164,90 @@ public class NovelActivity extends AppCompatActivity {
         }
     }
 
-    private class ReadEpub extends AsyncTask<String, Integer, Book> {
-
+    private class OpenEpub {
+        private final Executor executor = Executors.newSingleThreadExecutor();
+        private final Handler handler = new Handler(Looper.getMainLooper());
+        private final DecimalFormat fmt = new DecimalFormat("0.000"); // 保留进度格式化
         private final TextView progressMessageTextView;
 
-        DecimalFormat fmt;
-
-        public ReadEpub(android.view.View dialogView) {
+        public OpenEpub(android.view.View dialogView) {
             this.progressMessageTextView = dialogView.findViewById(R.id.message);
-            this.fmt = new DecimalFormat("0.000");
         }
 
-        @Override
-        protected void onPreExecute() {
-            super.onPreExecute();
-            // 显示 ProgressDialog
-            progressDialog.show();
-            progressMessageTextView.setText("正在打开epub");
+        public void executeTask() {
+            // 对应 onPreExecute
+            handler.post(() -> {
+                        progressDialog.show();
+                        progressMessageTextView.setText("正在打开epub");
+                    }
+            );
+            executor.execute(() -> {
+                var db = Database.getInstance(NovelActivity.this).getDatabase();
+                var info = db.get_epub_info(resource_id, book_uri);
+                epub_book_page = info.current_page;
+                SharedPreferences sharedPref = NovelActivity.this.getSharedPreferences("config", Context.MODE_PRIVATE);
+                var is_stream = sharedPref.getBoolean("epub_stream", false);
+                Book book = is_stream ? OpenStreamEpubBackground() : OpenEpubBackground();
+                handler.post(() -> {
+                    progressDialog.dismiss();
+                    if (book == null) {
+                        android.widget.Toast.makeText(NovelActivity.this, "打开epub失败", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    epub_book = book;
+                    notifyPageChanged(info.page_offset);
+                });
+            });
         }
 
-        @Override
-        protected Book doInBackground(String... params) {
-            var db = Database.getInstance(NovelActivity.this).getDatabase();
-            epub_book_page = db.get_epub_info(resource_id, book_uri).current_page;
-            SharedPreferences sharedPref = NovelActivity.this.getSharedPreferences("config", Context.MODE_PRIVATE);
-            var is_stream = sharedPref.getBoolean("epub_stream", false);
-            if (is_stream) {
-                try {
-                    var book = new LazyEpub(book_uri, client);
-                    return book;
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
+        // 进度更新方法
+        private void updateProgress(int current, int total) {
+            handler.post(() -> {
+                var a = fmt.format(current / 1024.0 / 1024.0);
+                var b = fmt.format(total / 1024.0 / 1024.0);
+                progressMessageTextView.setText("已完成 " + a + " MB / " + b + "MB");
+            });
+        }
+
+
+        private Book OpenStreamEpubBackground() {
+            try {
+                var book = new LazyEpub(book_uri, client);
+                return book;
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+
+        private Book OpenEpubBackground() {
+            try {
+                String key = DiskCache.generateKey(book_uri);
+                var diskCache = DiskCache.getInstance(NovelActivity.this).getCache();
+                var snapshot = diskCache.get(key);
+                if (snapshot != null) {
+                    try (var inputStream = snapshot.getInputStream(0)) {
+                        progressMessageTextView.setText("解析epub中");
+                        return new Epub(DiskCache.readAll(inputStream));
+                    } finally {
+                        snapshot.close();
+                    }
                 }
-            } else {
-                try {
-                    String key = DiskCache.generateKey(book_uri);
-                    var diskCache = DiskCache.getInstance(NovelActivity.this).getCache();
-                    var snapshot = diskCache.get(key);
-                    if (snapshot != null) {
-                        try (var inputStream = snapshot.getInputStream(0)) {
-                            progressMessageTextView.setText("解析epub中");
-                            return new Epub(DiskCache.readAll(inputStream));
-                        } finally {
-                            snapshot.close();
-                        }
-                    }
-                    var raw = client.open(book_uri, (current_bytes, total_bytes) -> publishProgress((int) current_bytes, (int) total_bytes));
-                    if (raw == null) {
-                        return null;
-                    }
-                    var editor = diskCache.edit(key);
-                    if (editor != null) {
-                        OutputStream outputStream = editor.newOutputStream(0);
-                        DiskCache.copy(new ByteArrayInputStream(raw), outputStream);
-                        editor.commit(); // 提交写入
-                    }
-                    progressMessageTextView.setText("解析epub中");
-                    return new Epub(raw);
-                } catch (IOException e) {
+                var raw = client.open(book_uri, (current_bytes, total_bytes) -> updateProgress((int) current_bytes, (int) total_bytes));
+                if (raw == null) {
                     return null;
                 }
+                var editor = diskCache.edit(key);
+                if (editor != null) {
+                    OutputStream outputStream = editor.newOutputStream(0);
+                    DiskCache.copy(new ByteArrayInputStream(raw), outputStream);
+                    editor.commit(); // 提交写入
+                }
+                progressMessageTextView.setText("解析epub中");
+                return new Epub(raw);
+            } catch (IOException e) {
+                return null;
             }
-        }
-
-        @Override
-        protected void onPostExecute(Book book) {
-            progressDialog.dismiss();
-            if (book == null) {
-                android.widget.Toast.makeText(NovelActivity.this, "打开epub失败", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            var db = Database.getInstance(NovelActivity.this).getDatabase();
-            var info = db.get_epub_info(resource_id, book_uri);
-            epub_book = book;
-            epub_book_page = info.current_page;
-            notifyPageChanged(info.page_offset);
-        }
-
-        @Override
-        protected void onProgressUpdate(Integer... values) {
-            double current_bytes = values[0];
-            double total_bytes = values[1];
-            var a = fmt.format(current_bytes / 1024 / 1024);
-            var b = fmt.format(total_bytes / 1024 / 1024);
-            progressMessageTextView.setText("已完成 " + a + " MB / " + b + "MB");
         }
     }
+
 }

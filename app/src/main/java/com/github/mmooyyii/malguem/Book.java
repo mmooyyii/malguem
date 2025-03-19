@@ -1,10 +1,5 @@
 package com.github.mmooyyii.malguem;
 
-import java.io.IOException;
-import java.util.Map;
-
-import io.documentnode.epub4j.domain.Resource;
-
 public interface Book {
     String page(int page);
 
