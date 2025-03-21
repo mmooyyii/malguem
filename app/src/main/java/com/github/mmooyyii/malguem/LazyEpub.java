@@ -78,6 +78,15 @@ public class LazyEpub implements Book {
     public void prepare(int from, int to) {
         var files = new ArrayList<String>();
         for (var page_num = from; page_num < to; ++page_num) {
+            var filename = contents.get(page_num);
+            files.add(filename);
+        }
+        try {
+            load_file_to_cache(files);
+        } catch (Exception ignore) {
+        }
+        files.clear();
+        for (var page_num = from; page_num < to; ++page_num) {
             try {
                 var filename = contents.get(page_num);
                 var html = new String(load_file(filename), StandardCharsets.UTF_8);
