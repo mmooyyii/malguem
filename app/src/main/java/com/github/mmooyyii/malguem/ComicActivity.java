@@ -114,17 +114,15 @@ public class ComicActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
+        var db = Database.getInstance(this).getDatabase();
+        db.save_history(resource_id, book_uri, epub_book.total_pages(), epub_book_page, 0);
         super.onBackPressed();
     }
-
 
     @Override
     protected void onDestroy() {
         executor.shutdownNow();
-        var db = Database.getInstance(this).getDatabase();
-        db.save_history(resource_id, book_uri, epub_book_page, 0);
         super.onDestroy();
-
         android.os.Process.killProcess(android.os.Process.myPid());
         System.exit(0);
     }

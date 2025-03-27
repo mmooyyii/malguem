@@ -17,9 +17,16 @@ public class ListItem {
 
     ViewType view_type;
 
-    public ListItem(int i, String s, FileType fileType) {
-        id = i;
-        name = s;
-        type = fileType;
+    int read_to_page;
+    int total_page;
+
+    public ListItem(int id, String name, FileType type) {
+        this.id = id;
+        this.name = name;
+        this.type = type;
+    }
+
+    public ListItem() {
+
     }
 }

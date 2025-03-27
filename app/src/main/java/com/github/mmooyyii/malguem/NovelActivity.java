@@ -1,5 +1,6 @@
 package com.github.mmooyyii.malguem;
 
+import android.annotation.SuppressLint;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Bundle;
@@ -45,6 +46,7 @@ public class NovelActivity extends AppCompatActivity {
     private final BlockingQueue<Integer> taskQueue = new LinkedBlockingQueue<>();
     private final ExecutorService executor = Executors.newFixedThreadPool(1);
 
+    @SuppressLint("SetJavaScriptEnabled")
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -55,6 +57,9 @@ public class NovelActivity extends AppCompatActivity {
         webSettings.setAllowFileAccess(true);
         webSettings.setAllowContentAccess(true);
         webSettings.setUseWideViewPort(false);
+        webSettings.setJavaScriptEnabled(true);
+        novelView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
+
         var intent = getIntent();
         resource_id = intent.getIntExtra("resource_id", 1);
         book_uri = intent.getStringExtra("book_uri");
@@ -81,15 +86,15 @@ public class NovelActivity extends AppCompatActivity {
 
     @Override
     public void onBackPressed() {
+        var db = Database.getInstance(this).getDatabase();
+        db.save_history(resource_id, book_uri, epub_book.total_pages(), epub_book_page, novelView.getScrollY());
         super.onBackPressed();
     }
 
     @Override
     protected void onDestroy() {
-        var db = Database.getInstance(this).getDatabase();
-        db.save_history(resource_id, book_uri, epub_book_page, novelView.getScrollY());
+        executor.shutdownNow();
         super.onDestroy();
-
         android.os.Process.killProcess(android.os.Process.myPid());
         System.exit(0);
     }

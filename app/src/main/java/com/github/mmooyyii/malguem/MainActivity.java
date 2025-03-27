@@ -14,6 +14,8 @@ import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 
 import java.io.IOException;
@@ -36,6 +38,9 @@ public class MainActivity extends AppCompatActivity {
 
     long kill_app_countdown = 0;
 
+    private ActivityResultLauncher<Intent> launcher;
+
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -47,6 +52,11 @@ public class MainActivity extends AppCompatActivity {
         } catch (IOException e) {
             throw new RuntimeException(e);
         }
+        launcher = registerForActivityResult(
+                new ActivityResultContracts.StartActivityForResult(),
+                result -> {
+                    new FetchFileListTask().executeTask();
+                });
     }
 
     public void setup_file_list() {
@@ -119,9 +129,9 @@ public class MainActivity extends AppCompatActivity {
                 }
                 case Epub: {
                     var db = Database.getInstance(this).getDatabase();
-                    var type = db.get_epub_info(file.id, make_uri(file.name)).view_type;
+                    var info = db.get_epub_info(file.id, make_uri(file.name));
                     Intent intent;
-                    if (type == ListItem.ViewType.Comic) {
+                    if (info.view_type == ListItem.ViewType.Comic) {
                         intent = new Intent(MainActivity.this, ComicActivity.class);
                     } else {
                         intent = new Intent(MainActivity.this, NovelActivity.class);
@@ -129,7 +139,8 @@ public class MainActivity extends AppCompatActivity {
                     intent.putExtra("resource_id", file.id);
                     intent.putExtra("book_uri", make_uri(file.name));
                     intent.putExtra("client", client.to_json());
-                    startActivity(intent);
+
+                    launcher.launch(intent);
                     break;
                 }
             }
@@ -285,6 +296,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+
     private class FetchFileListTask {
         private final Executor executor = Executors.newSingleThreadExecutor();
         private final Handler handler = new Handler(Looper.getMainLooper());
@@ -309,7 +321,11 @@ public class MainActivity extends AppCompatActivity {
                 var map = db.get_view_types(current_resource_id, epubs);
                 for (var file : fileList) {
                     if (file.type == ListItem.FileType.Epub && map.containsKey(make_uri(file.name))) {
-                        file.view_type = map.get(make_uri(file.name));
+                        var info = map.get(make_uri(file.name));
+                        assert info != null;
+                        file.view_type = info.view_type;
+                        file.total_page = info.total_page;
+                        file.read_to_page = info.read_to_page;
                     }
                 }
                 final var finalFileList = fileList;

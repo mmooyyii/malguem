@@ -39,12 +39,12 @@ public class Database {
 
         // 数据库名称和版本
         private static final String DATABASE_NAME = "malguem.db";
-        private static final int DATABASE_VERSION = 1;
+        private static final int DATABASE_VERSION = 2;
 
         // 创建表的 SQL 语句
         private static final String RESOURCE_TABLE = "CREATE TABLE resource (id INTEGER PRIMARY KEY, name TEXT NOT NULL, resource_type INTEGER NOT NULL, json_info TEXT NOT NULL);";
 
-        private static final String EPUB_TABLE = "CREATE TABLE epub (resource_id INTEGER NOT NULL,path TEXT NOT NULL, current_page INTEGER NOT NULL default 0, page_offset INTEGER NOT NULL default 0, view_type INTEGER NOT NULL default 0, PRIMARY KEY (resource_id, path));";
+        private static final String EPUB_TABLE = "CREATE TABLE epub (resource_id INTEGER NOT NULL,path TEXT NOT NULL, total_page INTEGER NOT NULL default 0, current_page INTEGER NOT NULL default 0, page_offset INTEGER NOT NULL default 0, view_type INTEGER NOT NULL default 0, PRIMARY KEY (resource_id, path));";
 
         public DatabaseHelper(Context context) {
             super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -104,12 +104,13 @@ public class Database {
             db.delete("resource", "id=?", new String[]{String.valueOf(resource_id)});
         }
 
-        public void save_history(int resource_id, String path, int current_page, int page_offset) {
+        public void save_history(int resource_id, String path, int total_page, int current_page, int page_offset) {
             init_epub(resource_id, path);
             var cur = getWritableDatabase();
             ContentValues values = new ContentValues();
             values.put("current_page", current_page);
             values.put("page_offset", page_offset);
+            values.put("total_page", total_page);
             cur.update("epub", values, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path});
         }
 
@@ -119,6 +120,7 @@ public class Database {
             values.put("resource_id", resource_id);
             values.put("path", path);
             values.put("current_page", 0);
+            values.put("total_page", 0);
             values.put("page_offset", 0);
             values.put("view_type", 0);
             cur.insertWithOnConflict("epub", null, values, SQLiteDatabase.CONFLICT_IGNORE);
@@ -149,24 +151,31 @@ public class Database {
             return output;
         }
 
-        public HashMap<String, ListItem.ViewType> get_view_types(int resource_id, List<String> paths) {
-            var output = new HashMap<String, ListItem.ViewType>();
+        public HashMap<String, ListItem> get_view_types(int resource_id, List<String> paths) {
+            var output = new HashMap<String, ListItem>();
             if (paths.isEmpty()) {
                 return output;
             }
             var db = getReadableDatabase();
             paths.add(String.valueOf(resource_id));
             var cursor = db.query("epub",
-                    new String[]{"path", "view_type"}, "path in " + make_in_list(paths.size() - 1) + " and resource_id=?",
+                    new String[]{"path", "view_type", "total_page", "current_page"}, "path in " + make_in_list(paths.size() - 1) + " and resource_id=?",
                     paths.toArray(new String[0]), null, null, null);
             while (cursor.moveToNext()) {
                 var path = cursor.getString(cursor.getColumnIndexOrThrow("path"));
                 var view_type = cursor.getInt(cursor.getColumnIndexOrThrow("view_type"));
+                var current_page = cursor.getInt(cursor.getColumnIndexOrThrow("current_page"));
+                var total_page = cursor.getInt(cursor.getColumnIndexOrThrow("total_page"));
+                var item = new ListItem();
+                item.name = path;
+                item.read_to_page = current_page;
+                item.total_page = total_page;
                 if (view_type == 0) {
-                    output.put(path, ListItem.ViewType.Comic);
+                    item.view_type = ListItem.ViewType.Comic;
                 } else {
-                    output.put(path, ListItem.ViewType.Novel);
+                    item.view_type = ListItem.ViewType.Novel;
                 }
+                output.put(path, item);
             }
             cursor.close();
             return output;
