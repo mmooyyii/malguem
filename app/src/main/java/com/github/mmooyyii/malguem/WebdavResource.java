@@ -32,6 +32,8 @@ public class WebdavResource implements ResourceInterface {
 
     private final Pattern pattern_ranges = Pattern.compile("bytes (\\d+)-(\\d+)/");
 
+    private static final byte[] ContentRanges = "Content-Range:".getBytes();
+
 
     WebdavResource(String url, String username, String passwd) {
         this.url = url;
@@ -104,7 +106,6 @@ public class WebdavResource implements ResourceInterface {
     }
 
     public HashMap<Slice, byte[]> open(String uri, List<Slice> slices) throws Exception {
-
         var builder = new Request.Builder().url(url + uri).addHeader("Authorization", Credentials.basic(username, password));
         var sj = new StringJoiner(",");
         for (var slice : slices) {
@@ -121,35 +122,69 @@ public class WebdavResource implements ResourceInterface {
                     output.put(slices.get(0), bytes);
                     return output;
                 }
-                var start_at = System.currentTimeMillis();
-                var out = SplitMultipleRanges(bytes);
-                Log.d("http", "split: " + (System.currentTimeMillis() - start_at));
-                return out;
+                return SplitMultipleRanges(bytes);
             }
         }
         throw new IOException("http 请求失败, 打不开" + url);
     }
 
-    public static String convertArrayListToByteArray(ArrayList<Byte> byteList) {
-        byte[] byteArray = new byte[byteList.size()];
-        for (int i = 0; i < byteList.size(); i++) {
-            byteArray[i] = byteList.get(i);
+
+    static class Buffer {
+        int buffer_index = 0;
+        byte[] buffer = new byte[100];
+
+        public int size() {
+            return buffer_index;
         }
-        return new String(byteArray, StandardCharsets.UTF_8);
+
+        void clear() {
+            buffer_index = 0;
+        }
+
+        boolean StartWithRN() {
+            return size() >= 2 && buffer[0] == '\r' && buffer[1] == '\n';
+        }
+
+        boolean EndWithRN() {
+            return size() >= 2 && buffer[buffer_index - 2] == '\r' && buffer[buffer_index - 1] == '\n';
+        }
+
+        void add(byte b) {
+            if (buffer_index + 1 == buffer.length) {
+                buffer = new byte[buffer.length * 3 / 2];
+            }
+            buffer[buffer_index++] = b;
+        }
+
+        private boolean isContentRanges() {
+            if (size() < ContentRanges.length) {
+                return false;
+            }
+            for (int i = 0; i < ContentRanges.length; i++) {
+                if (buffer[i] != ContentRanges[i]) {
+                    return false;
+                }
+            }
+            return true;
+        }
+
+        String to_string() {
+            return new String(buffer, 0, buffer_index, StandardCharsets.US_ASCII);
+        }
     }
 
     private HashMap<Slice, byte[]> SplitMultipleRanges(byte[] bytes) {
         var output = new HashMap<Slice, byte[]>();
-        var buffer = new ArrayList<Byte>();
+        var buffer = new Buffer();
         Slice slice = null;
         var idx = 0;
         while (idx < bytes.length) {
             buffer.add(bytes[idx]);
             ++idx;
-            if (EndsWithRN(buffer)) {
-                if (StartsWith(buffer, "Content-Range:")) {
-                    slice = extractRange(convertArrayListToByteArray(buffer));
-                } else if (StartsWith(buffer, "\r\n") && slice != null) {
+            if (buffer.EndWithRN()) {
+                if (buffer.isContentRanges()) {
+                    slice = extractRange(buffer.to_string());
+                } else if (buffer.StartWithRN() && slice != null) {
                     output.put(slice, Arrays.copyOfRange(bytes, idx, idx + slice.size));
                     idx += slice.size;
                     slice = null;
@@ -158,27 +193,6 @@ public class WebdavResource implements ResourceInterface {
             }
         }
         return output;
-    }
-
-    private static boolean StartsWith(ArrayList<Byte> buffer, String start) {
-        if (buffer.size() < start.length()) {
-            return false;
-        }
-        byte[] startBytes = start.getBytes();
-        for (int i = 0; i < startBytes.length; i++) {
-            if (!buffer.get(i).equals(startBytes[i])) {
-                return false;
-            }
-        }
-        return true;
-    }
-
-    private Boolean EndsWithRN(ArrayList<Byte> buffer) {
-        var len = buffer.size();
-        if (len < 2) {
-            return false;
-        }
-        return buffer.get(len - 2) == '\r' && buffer.get(len - 1) == '\n';
     }
 
     private Slice extractRange(String contentRange) {
