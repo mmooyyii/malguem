@@ -26,7 +26,6 @@ public class Slice {
         return Objects.equals(size, slice.size);
     }
 
-    // 重写 hashCode 方法，保证相等的对象有相同的哈希码
     @Override
     public int hashCode() {
         int result = offset != null ? offset.hashCode() : 0;

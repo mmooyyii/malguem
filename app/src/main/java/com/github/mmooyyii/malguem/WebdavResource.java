@@ -1,12 +1,8 @@
 package com.github.mmooyyii.malguem;
 
-import androidx.annotation.NonNull;
-
 import com.google.gson.Gson;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -16,12 +12,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Objects;
 import java.util.StringJoiner;
-import java.util.concurrent.CountDownLatch;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import okhttp3.Call;
-import okhttp3.Callback;
 import okhttp3.Credentials;
 import okhttp3.HttpUrl;
 import okhttp3.OkHttpClient;
@@ -91,55 +84,6 @@ public class WebdavResource implements ResourceInterface {
             }
         }
         throw new IOException("http 请求失败, 打开目录" + make_dir_url(path));
-    }
-
-    public byte[] open(String uri, final DownloadListener listener) {
-        Request request = new Request.
-                Builder().
-                url(url + uri).
-                addHeader("Authorization", Credentials.basic(username, password)).
-                build();
-
-        final CountDownLatch latch = new CountDownLatch(1);
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        client.newCall(request).enqueue(new Callback() {
-            @Override
-            public void onFailure(@NonNull Call call, @NonNull IOException e) {
-                latch.countDown();
-            }
-
-            @Override
-            public void onResponse(@NonNull Call call, @NonNull Response response) throws IOException {
-                if (response.isSuccessful()) {
-                    assert response.body() != null;
-                    long totalLength = response.body().contentLength();
-                    InputStream inputStream = response.body().byteStream();
-
-                    byte[] buffer = new byte[4096];
-                    int bytesRead;
-                    long totalBytesRead = 0;
-                    while ((bytesRead = inputStream.read(buffer)) != -1) {
-                        totalBytesRead += bytesRead;
-                        bos.write(buffer, 0, bytesRead);
-                        // 计算下载进度
-                        // 回调到主线程更新UI
-                        listener.onProgress(totalBytesRead, totalLength);
-                    }
-                    inputStream.close();
-                }
-                latch.countDown();
-            }
-        });
-        try {
-            // 等待异步请求完成
-            latch.await();
-        } catch (InterruptedException e) {
-            return null;
-        }
-        if (bos.size() == 0) {
-            return null;
-        }
-        return bos.toByteArray();
     }
 
     @Override

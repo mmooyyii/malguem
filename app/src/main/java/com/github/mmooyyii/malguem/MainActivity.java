@@ -2,9 +2,7 @@ package com.github.mmooyyii.malguem;
 
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
-import android.content.Context;
 import android.content.Intent;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -18,7 +16,6 @@ import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 
-import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -33,13 +30,9 @@ public class MainActivity extends AppCompatActivity {
     ResourceInterface client;
     int current_resource_id;
     List<String> pwd;
-
     boolean at_root_list = false;
-
     long kill_app_countdown = 0;
-
     private ActivityResultLauncher<Intent> launcher;
-
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -75,20 +68,6 @@ public class MainActivity extends AppCompatActivity {
             var file = fileListAdapter.getItem(position);
             assert file != null;
             switch (file.type) {
-                case UseEpubStream: {
-                    SharedPreferences sharedPref = this.getSharedPreferences("config", Context.MODE_PRIVATE);
-                    var is_stream = sharedPref.getBoolean("epub_stream", false);
-                    SharedPreferences.Editor editor = sharedPref.edit();
-                    editor.putBoolean("epub_stream", !is_stream);
-                    editor.apply();
-                    if (is_stream) {
-                        file.name = "使用流式epub(实验)";
-                    } else {
-                        file.name = "使用预加载epub(稳定)";
-                    }
-                    fileListAdapter.notifyDataSetChanged();
-                    break;
-                }
                 case AddWebDav: {
                     showLoginDialog();
                     break;
@@ -205,13 +184,6 @@ public class MainActivity extends AppCompatActivity {
             fileListAdapter.addAll(file);
         }
         fileListAdapter.addAll(new ListItem(0, "新增webdav", ListItem.FileType.AddWebDav));
-        SharedPreferences sharedPref = this.getSharedPreferences("config", Context.MODE_PRIVATE);
-        var is_stream = sharedPref.getBoolean("epub_stream", false);
-        if (is_stream) {
-            fileListAdapter.addAll(new ListItem(0, "使用预加载epub(稳定)", ListItem.FileType.UseEpubStream));
-        } else {
-            fileListAdapter.addAll(new ListItem(0, "使用流式epub(实验)", ListItem.FileType.UseEpubStream));
-        }
         fileListAdapter.notifyDataSetChanged();
     }
 

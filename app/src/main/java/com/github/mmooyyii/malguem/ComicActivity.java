@@ -1,8 +1,6 @@
 package com.github.mmooyyii.malguem;
 
 
-import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -14,14 +12,11 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.OutputStream;
 import java.text.DecimalFormat;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
@@ -62,7 +57,6 @@ public class ComicActivity extends AppCompatActivity {
         webSettings.setAllowFileAccess(true);
         webSettings.setAllowContentAccess(true);
         webSettings.setUseWideViewPort(true);
-
         webSettings = ComicViewRight.getSettings();
         webSettings.setLoadWithOverviewMode(true);
         webSettings.setAllowFileAccess(true);
@@ -215,27 +209,11 @@ public class ComicActivity extends AppCompatActivity {
             );
             executor.execute(() -> {
                 LoadReadHistory();
-                SharedPreferences sharedPref = ComicActivity.this.getSharedPreferences("config", Context.MODE_PRIVATE);
-                var is_stream = sharedPref.getBoolean("epub_stream", false);
-                Book book = is_stream ? OpenStreamEpubBackground() : OpenEpubBackground();
+                epub_book = OpenStreamEpubBackground();
                 handler.post(() -> {
                     progressDialog.dismiss();
-                    if (book == null) {
-                        android.widget.Toast.makeText(ComicActivity.this, "打开epub失败", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    epub_book = book;
                     notifyPageChanged();
                 });
-            });
-        }
-
-        // 进度更新方法
-        private void updateProgress(int current, int total) {
-            handler.post(() -> {
-                var a = fmt.format(current / 1024.0 / 1024.0);
-                var b = fmt.format(total / 1024.0 / 1024.0);
-                progressMessageTextView.setText(getString(R.string.load_percent, a, b));
             });
         }
 
@@ -249,18 +227,6 @@ public class ComicActivity extends AppCompatActivity {
                 return new LazyEpub(book_uri, client);
             } catch (Exception e) {
                 throw new RuntimeException(e);
-            }
-        }
-
-        private Book OpenEpubBackground() {
-            try {
-                var raw = client.open(book_uri, (current_bytes, total_bytes) -> updateProgress((int) current_bytes, (int) total_bytes));
-                if (raw == null) {
-                    return null;
-                }
-                return new Epub(raw);
-            } catch (IOException e) {
-                return null;
             }
         }
     }

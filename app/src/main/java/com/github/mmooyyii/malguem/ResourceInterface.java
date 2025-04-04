@@ -11,8 +11,6 @@ import java.util.List;
 public interface ResourceInterface {
     List<ListItem> ls(int id, List<String> path) throws Exception;
 
-    byte[] open(String url, final DownloadListener listener);
-
     String to_json();
 
     static ResourceInterface from_json(String json) {

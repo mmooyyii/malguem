@@ -1,6 +1,3 @@
-import com.android.build.api.dsl.Packaging
-
-
 plugins {
     alias(libs.plugins.android.application)
 }
@@ -40,8 +37,5 @@ dependencies {
     implementation(libs.gson)
     implementation(libs.okhttp)
     implementation(libs.androidx.appcompat)
-    implementation("io.documentnode:epub4j-core:4.2.1") {
-        exclude(group = "xmlpull")
-    }
     implementation(libs.jsoup)
 }

@@ -1,8 +1,6 @@
 package com.github.mmooyyii.malguem;
 
 import android.annotation.SuppressLint;
-import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -13,14 +11,11 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.TextView;
-import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 
 import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.OutputStream;
 import java.text.DecimalFormat;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.CountDownLatch;
@@ -190,16 +185,9 @@ public class NovelActivity extends AppCompatActivity {
                 var db = Database.getInstance(NovelActivity.this).getDatabase();
                 var info = db.get_epub_info(resource_id, book_uri);
                 epub_book_page = info.current_page;
-                SharedPreferences sharedPref = NovelActivity.this.getSharedPreferences("config", Context.MODE_PRIVATE);
-                var is_stream = sharedPref.getBoolean("epub_stream", false);
-                Book book = is_stream ? OpenStreamEpubBackground() : OpenEpubBackground();
+                epub_book = OpenStreamEpubBackground();
                 handler.post(() -> {
                     progressDialog.dismiss();
-                    if (book == null) {
-                        android.widget.Toast.makeText(NovelActivity.this, "打开epub失败", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    epub_book = book;
                     notifyPageChanged(info.page_offset);
                 });
             });
@@ -219,18 +207,6 @@ public class NovelActivity extends AppCompatActivity {
                 return new LazyEpub(book_uri, client);
             } catch (Exception e) {
                 throw new RuntimeException(e);
-            }
-        }
-
-        private Book OpenEpubBackground() {
-            try {
-                var raw = client.open(book_uri, (current_bytes, total_bytes) -> updateProgress((int) current_bytes, (int) total_bytes));
-                if (raw == null) {
-                    return null;
-                }
-                return new Epub(raw);
-            } catch (IOException e) {
-                return null;
             }
         }
     }
