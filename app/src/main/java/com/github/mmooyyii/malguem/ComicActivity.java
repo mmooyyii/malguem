@@ -254,28 +254,10 @@ public class ComicActivity extends AppCompatActivity {
 
         private Book OpenEpubBackground() {
             try {
-                String key = DiskCache.generateKey(book_uri);
-                var diskCache = DiskCache.getInstance(ComicActivity.this).getCache();
-                var snapshot = diskCache.get(key);
-                if (snapshot != null) {
-                    try (var inputStream = snapshot.getInputStream(0)) {
-                        progressMessageTextView.setText(getString(R.string.parse_epub));
-                        return new Epub(DiskCache.readAll(inputStream));
-                    } finally {
-                        snapshot.close();
-                    }
-                }
                 var raw = client.open(book_uri, (current_bytes, total_bytes) -> updateProgress((int) current_bytes, (int) total_bytes));
                 if (raw == null) {
                     return null;
                 }
-                var editor = diskCache.edit(key);
-                if (editor != null) {
-                    OutputStream outputStream = editor.newOutputStream(0);
-                    DiskCache.copy(new ByteArrayInputStream(raw), outputStream);
-                    editor.commit(); // 提交写入
-                }
-                progressMessageTextView.setText(getString(R.string.parse_epub));
                 return new Epub(raw);
             } catch (IOException e) {
                 return null;

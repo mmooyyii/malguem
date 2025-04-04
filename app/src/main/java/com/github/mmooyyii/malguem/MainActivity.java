@@ -47,11 +47,6 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         setup_file_list();
         pwd = new ArrayList<>();
-        try {
-            DiskCache.getInstance(MainActivity.this);
-        } catch (IOException e) {
-            throw new RuntimeException(e);
-        }
         launcher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
@@ -92,19 +87,6 @@ public class MainActivity extends AppCompatActivity {
                         file.name = "使用预加载epub(稳定)";
                     }
                     fileListAdapter.notifyDataSetChanged();
-                    break;
-                }
-                case ClearCache: {
-                    try {
-                        DiskCache.getInstance(MainActivity.this).getCache().delete();
-                        Toast.makeText(MainActivity.this, "清除成功", Toast.LENGTH_SHORT).show();
-                    } catch (IOException e) {
-                        Toast.makeText(MainActivity.this, "清除失败", Toast.LENGTH_SHORT).show();
-                    }
-                    break;
-                }
-                case SetCache: {
-                    showSetCacheDialog();
                     break;
                 }
                 case AddWebDav: {
@@ -214,48 +196,6 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
-    private void showSetCacheDialog() {
-        // 获取布局填充器
-        LayoutInflater inflater = getLayoutInflater();
-        // 加载自定义布局
-        View dialogView = inflater.inflate(R.layout.dialog_setcache, null);
-        // 初始化输入框
-        final EditText cacheSize = dialogView.findViewById(R.id.cacheSize);
-        SharedPreferences sharedPref = this.getSharedPreferences("config", Context.MODE_PRIVATE);
-        int maxSize = sharedPref.getInt("max_local_cache_size", 5 * 1024);
-        var enable = sharedPref.getBoolean("enable_cache", true);
-        if (enable) {
-            cacheSize.setText(String.valueOf(maxSize));
-        } else {
-            cacheSize.setText("0");
-        }
-        // 创建 AlertDialog.Builder 对象
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("设置缓存大小")
-                .setView(dialogView)
-                .setPositiveButton("确认", (dialog, which) -> {
-                    try {
-                        SharedPreferences.Editor editor = sharedPref.edit();
-                        String size = cacheSize.getText().toString();
-                        var val = Integer.parseInt(size);
-                        editor.putInt("max_local_cache_size", val);
-                        editor.apply(); // 异步提交（推荐）
-                        DiskCache.getInstance(MainActivity.this).setMaxSize(val);
-                        Toast.makeText(MainActivity.this, "设置成功", Toast.LENGTH_SHORT).show();
-                    } catch (IOException e) {
-                        Toast.makeText(MainActivity.this, "设置失败", Toast.LENGTH_SHORT).show();
-                    }
-                })
-                .setNegativeButton("取消", (dialog, which) -> {
-                    // 取消对话框
-                    dialog.dismiss();
-                });
-
-        // 创建并显示对话框
-        AlertDialog dialog = builder.create();
-        dialog.show();
-    }
-
 
     public void init_resource_list() {
         at_root_list = true;
@@ -265,8 +205,6 @@ public class MainActivity extends AppCompatActivity {
             fileListAdapter.addAll(file);
         }
         fileListAdapter.addAll(new ListItem(0, "新增webdav", ListItem.FileType.AddWebDav));
-        fileListAdapter.addAll(new ListItem(0, "设置缓存", ListItem.FileType.SetCache));
-        fileListAdapter.addAll(new ListItem(0, "清除缓存", ListItem.FileType.ClearCache));
         SharedPreferences sharedPref = this.getSharedPreferences("config", Context.MODE_PRIVATE);
         var is_stream = sharedPref.getBoolean("epub_stream", false);
         if (is_stream) {
