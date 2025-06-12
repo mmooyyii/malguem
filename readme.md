@@ -1,7 +1,7 @@
 ## malguem
 在Android TV上看epub格式的漫画和小说的app, 让所有的操作都能通过遥控器完成.
 
-只支持从webdav中获取epub资源. 推荐使用 https://alist.nn.ci/zh/(alist不行了, 我支持下smb协议)来搭建webdav服务器
+只支持从webdav中获取epub资源. 推荐使用 https://alist.nn.ci/zh/ 来搭建webdav服务器 (alist不行了, 我有空写下smb协议) 
 
 malguem 有2种阅读模式, 可以在打开epub之前, 长按确认键切换
 
