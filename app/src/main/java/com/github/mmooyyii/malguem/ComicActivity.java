@@ -64,22 +64,16 @@ public class ComicActivity extends AppCompatActivity {
         webSettings.setAllowFileAccess(true);
         webSettings.setAllowContentAccess(true);
         webSettings.setUseWideViewPort(true);
-        // 监听左边 WebView 的滚动事件
+        // 左栏向下滚到底 -> 焦点切到右栏 (canScrollVertically 比 contentHeight*scale 的算术判断可靠)
         ComicViewLeft.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
-            if (scrollY > oldScrollY) { // 向下滚动
-                var d1 = (double) ComicViewLeft.getContentHeight() * ComicViewLeft.getScale();
-                var d2 = ComicViewLeft.getHeight() + scrollY;
-                if (Math.abs(d1 - d2) <= 1) {
-                    ComicViewRight.requestFocus();
-                }
+            if (scrollY > oldScrollY && !v.canScrollVertically(1)) {
+                ComicViewRight.requestFocus();
             }
         });
-        // 监听右边 WebView 的滚动事件
+        // 右栏向上滚到顶 -> 焦点切回左栏
         ComicViewRight.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
-            if (scrollY < oldScrollY) { // 向上滚动
-                if (scrollY == 0) {
-                    ComicViewLeft.requestFocus();
-                }
+            if (scrollY < oldScrollY && !v.canScrollVertically(-1)) {
+                ComicViewLeft.requestFocus();
             }
         });
         var intent = getIntent();
