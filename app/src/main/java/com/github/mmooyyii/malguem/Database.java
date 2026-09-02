@@ -6,9 +6,6 @@ import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteOpenHelper;
 import android.util.Log;
 
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
-
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -66,40 +63,29 @@ public class Database {
             onCreate(db);
         }
 
-        public void add_webdav(String url, String username, String passwd) {
+        // type: 1=webdav 2=smb 3=local; json 由各 ResourceInterface.to_json() 生成(自带 type 字段)
+        public void add_resource(String name, int type, String json) {
             var cur = getWritableDatabase();
             ContentValues values = new ContentValues();
-            values.put("name", url);
-            values.put("resource_type", 1);
-
-            var map = new HashMap<String, String>();
-            map.put("url", url);
-            map.put("username", username);
-            map.put("passwd", passwd);
-
-            Gson gson = new Gson();
-            values.put("json_info", gson.toJson(map));
+            values.put("name", name);
+            values.put("resource_type", type);
+            values.put("json_info", json);
             cur.insert("resource", null, values);
         }
 
-        public WebdavResource get_webdav(int resource_id) {
+        public ResourceInterface get_resource(int resource_id) {
             var db = getReadableDatabase();
             var cursor = db.query("resource", new String[]{"json_info"}, "id=?", new String[]{String.valueOf(resource_id)}, null, null, null);
-            Gson gson = new Gson();
+            ResourceInterface resource = null;
             if (cursor.moveToNext()) {
                 var json = cursor.getString(cursor.getColumnIndexOrThrow("json_info"));
-                // 使用 TypeToken 来指定转换的目标类型
-                var type = new TypeToken<HashMap<String, String>>() {
-                }.getType();
-                HashMap<String, String> map = gson.fromJson(json, type);
-                cursor.close();
-                return new WebdavResource(map.get("url"), map.get("username"), map.get("passwd"));
+                resource = ResourceInterface.from_json(json);
             }
             cursor.close();
-            return null;
+            return resource;
         }
 
-        public void delete_webdav(int resource_id) {
+        public void delete_resource(int resource_id) {
             var db = getWritableDatabase();
             db.delete("resource", "id=?", new String[]{String.valueOf(resource_id)});
         }
@@ -183,12 +169,14 @@ public class Database {
 
         public List<ListItem> resource_list() {
             var db = getReadableDatabase();
-            var cursor = db.query("resource", new String[]{"id", "name"}, null, null, null, null, null);
+            var cursor = db.query("resource", new String[]{"id", "name", "resource_type"}, null, null, null, null, null);
             var list = new ArrayList<ListItem>();
             while (cursor.moveToNext()) {
                 var id = cursor.getInt(cursor.getColumnIndexOrThrow("id"));
                 var name = cursor.getString(cursor.getColumnIndexOrThrow("name"));
-                list.add(new ListItem(id, name, ListItem.FileType.Resource));
+                var item = new ListItem(id, name, ListItem.FileType.Resource);
+                item.resource_type = cursor.getInt(cursor.getColumnIndexOrThrow("resource_type"));
+                list.add(item);
             }
             cursor.close();
             return list;

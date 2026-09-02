@@ -18,6 +18,14 @@ public interface ResourceInterface {
         var type = new TypeToken<HashMap<String, String>>() {
         }.getType();
         HashMap<String, String> map = gson.fromJson(json, type);
+        String t = map.get("type");
+        if ("smb".equals(t)) {
+            return SmbResource.fromMap(map);
+        }
+        if ("local".equals(t)) {
+            return LocalResource.fromMap(map);
+        }
+        // 缺省(含没有 type 字段的旧数据)按 webdav 处理
         return new WebdavResource(map.get("url"), map.get("username"), map.get("passwd"));
     }
 

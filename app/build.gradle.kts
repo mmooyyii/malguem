@@ -53,6 +53,21 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    packaging {
+        resources {
+            // jcifs-ng 依赖 bouncycastle(签名 jar) 与 slf4j, 去掉重复/签名文件避免打包冲突
+            excludes += setOf(
+                "META-INF/DEPENDENCIES",
+                "META-INF/LICENSE",
+                "META-INF/LICENSE.txt",
+                "META-INF/NOTICE",
+                "META-INF/NOTICE.txt",
+                "META-INF/*.SF",
+                "META-INF/*.DSA",
+                "META-INF/*.RSA"
+            )
+        }
+    }
 }
 
 dependencies {
@@ -62,4 +77,5 @@ dependencies {
     implementation(libs.okhttp)
     implementation(libs.androidx.appcompat)
     implementation(libs.jsoup)
+    implementation(libs.jcifs.ng)
 }

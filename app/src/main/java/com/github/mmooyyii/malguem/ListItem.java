@@ -15,6 +15,7 @@ public class ListItem {
     String name;
     String uri; // epub 的完整路径 (pwd + name), 用于加载封面/打开
     FileType type;
+    int resource_type; // 数据源类型 (1=webdav 2=smb 3=local), 仅 Resource 行用于选图标
 
     ViewType view_type;
 

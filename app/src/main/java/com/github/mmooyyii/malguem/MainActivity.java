@@ -3,9 +3,14 @@ package com.github.mmooyyii.malguem;
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.Settings;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.EditText;
@@ -83,12 +88,12 @@ public class MainActivity extends AppCompatActivity {
     private void onFileClicked(ListItem file) {
         switch (file.type) {
             case AddWebDav: {
-                showLoginDialog();
+                showAddChooser();
                 break;
             }
             case Resource: {
                 var db = Database.getInstance(this).getDatabase();
-                client = db.get_webdav(file.id);
+                client = db.get_resource(file.id);
                 current_resource_id = file.id;
                 if (client == null) {
                     android.widget.Toast.makeText(MainActivity.this, "数据库异常", Toast.LENGTH_SHORT).show();
@@ -132,7 +137,7 @@ public class MainActivity extends AppCompatActivity {
         builder.setPositiveButton("删除", (dialog, which) -> {
             // 处理删除操作，这里简单地显示一个 Toast 消息
             var db = Database.getInstance(MainActivity.this).getDatabase();
-            db.delete_webdav(id);
+            db.delete_resource(id);
             Toast.makeText(MainActivity.this, "删除成功", Toast.LENGTH_SHORT).show();
             dialog.dismiss(); // 关闭对话框
             init_resource_list();
@@ -148,43 +153,109 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
-    @SuppressLint("SetTextI18n")
-    private void showLoginDialog() {
-        // 获取布局填充器
-        LayoutInflater inflater = getLayoutInflater();
-        // 加载自定义布局
-        View dialogView = inflater.inflate(R.layout.dialog_login, null);
+    // 新增数据源: 先选类型, 再进对应配置弹窗
+    private void showAddChooser() {
+        String[] types = {"WebDAV", "SMB", "本地硬盘"};
+        new AlertDialog.Builder(this)
+                .setTitle("选择数据源类型")
+                .setItems(types, (dialog, which) -> {
+                    if (which == 0) {
+                        showWebdavDialog();
+                    } else if (which == 1) {
+                        showSmbDialog();
+                    } else {
+                        showLocalDialog();
+                    }
+                })
+                .show();
+    }
 
-        // 初始化输入框
+    @SuppressLint("SetTextI18n")
+    private void showWebdavDialog() {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_login, null);
         final EditText etUsername = dialogView.findViewById(R.id.et_username);
         final EditText etPassword = dialogView.findViewById(R.id.et_password);
         final EditText etUrl = dialogView.findViewById(R.id.et_url);
-
         etUrl.setText("http://192.168.31.241:5244/dav/kuake");
         etUsername.setText("admin");
         etPassword.setText("a123456");
-        // 创建 AlertDialog.Builder 对象
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        builder.setTitle("添加webdav")
+        new AlertDialog.Builder(this)
+                .setTitle("添加 WebDAV")
                 .setView(dialogView)
                 .setPositiveButton("添加", (dialog, which) -> {
-                    // 获取用户输入的用户名、密码和 URL
                     String username = etUsername.getText().toString();
                     String password = etPassword.getText().toString();
                     String url = etUrl.getText().toString();
+                    var r = new WebdavResource(url, username, password);
                     var db = Database.getInstance(MainActivity.this).getDatabase();
-                    db.add_webdav(url, username, password);
+                    db.add_resource(url, 1, r.to_json());
                     Toast.makeText(MainActivity.this, "添加成功", Toast.LENGTH_SHORT).show();
                     init_resource_list();
                 })
-                .setNegativeButton("取消", (dialog, which) -> {
-                    // 取消对话框
-                    dialog.dismiss();
-                });
+                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                .show();
+    }
 
-        // 创建并显示对话框
-        AlertDialog dialog = builder.create();
-        dialog.show();
+    private void showSmbDialog() {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_smb, null);
+        final EditText etHost = dialogView.findViewById(R.id.et_host);
+        final EditText etShare = dialogView.findViewById(R.id.et_share);
+        final EditText etUsername = dialogView.findViewById(R.id.et_username);
+        final EditText etPassword = dialogView.findViewById(R.id.et_password);
+        new AlertDialog.Builder(this)
+                .setTitle("添加 SMB")
+                .setView(dialogView)
+                .setPositiveButton("添加", (dialog, which) -> {
+                    String host = etHost.getText().toString().trim();
+                    String share = etShare.getText().toString().trim();
+                    String user = etUsername.getText().toString();
+                    String pass = etPassword.getText().toString();
+                    var r = new SmbResource(host, share, user, pass, "");
+                    var db = Database.getInstance(MainActivity.this).getDatabase();
+                    db.add_resource("smb://" + host + "/" + share, 2, r.to_json());
+                    Toast.makeText(MainActivity.this, "添加成功", Toast.LENGTH_SHORT).show();
+                    init_resource_list();
+                })
+                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                .show();
+    }
+
+    private void showLocalDialog() {
+        ensureStoragePermission();
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_local, null);
+        final EditText etPath = dialogView.findViewById(R.id.et_path);
+        new AlertDialog.Builder(this)
+                .setTitle("添加本地目录")
+                .setView(dialogView)
+                .setPositiveButton("添加", (dialog, which) -> {
+                    String path = etPath.getText().toString().trim();
+                    var r = new LocalResource(path);
+                    var db = Database.getInstance(MainActivity.this).getDatabase();
+                    db.add_resource(path, 3, r.to_json());
+                    Toast.makeText(MainActivity.this, "添加成功", Toast.LENGTH_SHORT).show();
+                    init_resource_list();
+                })
+                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                .show();
+    }
+
+    // 本地硬盘读取需要存储权限: R+ 走"所有文件访问", 以下走运行时 READ_EXTERNAL_STORAGE
+    private void ensureStoragePermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            if (!Environment.isExternalStorageManager()) {
+                try {
+                    startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                            Uri.parse("package:" + getPackageName())));
+                } catch (Exception e) {
+                    startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
+                }
+            }
+        } else {
+            if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                    != PackageManager.PERMISSION_GRANTED) {
+                requestPermissions(new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
+            }
+        }
     }
 
 

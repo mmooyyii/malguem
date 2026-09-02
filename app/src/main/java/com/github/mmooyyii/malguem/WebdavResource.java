@@ -90,6 +90,7 @@ public class WebdavResource implements ResourceInterface {
     @Override
     public String to_json() {
         var map = new HashMap<String, String>();
+        map.put("type", "webdav");
         map.put("url", url);
         map.put("username", username);
         map.put("passwd", password);

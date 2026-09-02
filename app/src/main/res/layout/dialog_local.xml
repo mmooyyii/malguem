@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingLeft="24dp"
+    android:paddingTop="20dp"
+    android:paddingRight="24dp"
+    android:paddingBottom="8dp">
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="本地目录路径"
+        style="@style/Text.DialogLabel" />
+
+    <EditText
+        android:id="@+id/et_path"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:hint="/storage/emulated/0/Books"
+        android:inputType="textUri"
+        style="@style/Edit.Field" />
+</LinearLayout>

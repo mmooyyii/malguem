@@ -103,7 +103,7 @@ public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
                 break;
             case Resource:
                 h.cover.setBackgroundResource(R.drawable.cover_tile);
-                h.coverIcon.setImageResource(R.drawable.ic_cloud);
+                h.coverIcon.setImageResource(resourceIcon(item.resource_type));
                 h.coverIcon.setVisibility(View.VISIBLE);
                 h.caption.setText(display);
                 break;
@@ -150,6 +150,17 @@ public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
         var uri = item.uri != null ? item.uri : item.name;
         if (client != null && uri != null) {
             coverLoader.load(namespace, uri, client, h.coverImage);
+        }
+    }
+
+    private static int resourceIcon(int type) {
+        switch (type) {
+            case 2:
+                return R.drawable.ic_nas;
+            case 3:
+                return R.drawable.ic_storage;
+            default:
+                return R.drawable.ic_cloud;
         }
     }
 

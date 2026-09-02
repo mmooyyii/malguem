@@ -4,6 +4,12 @@
     tools:ignore="MissingLeanbackLauncher">
 
     <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission
+        android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission
+        android:name="android.permission.MANAGE_EXTERNAL_STORAGE"
+        tools:ignore="ScopedStorage" />
 
     <uses-feature
         android:name="android.hardware.touchscreen"
