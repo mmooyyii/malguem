@@ -13,6 +13,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -25,6 +26,10 @@ public class LazyEpub implements Book {
     private static final int EOCD_SIGNATURE = 0x06054b50;
     private static final int CENTRAL_DIR_SIGNATURE = 0x02014b50;
     private static final int LOCAL_HEADER_SIGNATURE = 0x04034b50;
+    private static final int TAIL_SIZE = 512 * 1024; // 首次读取的尾部大小, 尽量一次拿到 EOCD + 整个中央目录
+    private static final int HEADER_SLACK = 512;      // 单文件一次读回时本地头长度的冗余上界
+
+    private int eocdIdxInTail; // EOCD 签名在 tail 缓冲中的下标
 
     String title;
     String uri;
@@ -57,22 +62,26 @@ public class LazyEpub implements Book {
     }
 
     private void init_epub_dir() throws Exception {
-        // 先请求ZIP文件末尾的22字节（End of Central Directory最小长度）
+        // 一次读取较大的文件尾部, 通常同时包含 EOCD 和整个中央目录 (也覆盖 ZIP 注释), 省掉一轮往返
         var slice = new Slice();
-        slice.offset = -22;
-        if (!initCentralDirLocate(file.open(uri, slice))) {
-            // ZIP 可能带注释, EOCD 不在最后 22 字节内, 扩大后缀范围重试 (22 + 最大注释长度 65535)
-            slice = new Slice();
-            slice.offset = -65557;
-            if (!initCentralDirLocate(file.open(uri, slice))) {
-                throw new IllegalArgumentException("EOCD signature not found");
-            }
+        slice.offset = -TAIL_SIZE;
+        byte[] tail = file.open(uri, slice);
+        if (!initCentralDirLocate(tail)) {
+            throw new IllegalArgumentException("EOCD signature not found");
         }
-        slice = new Slice();
-        slice.offset = centralDirOffset;
-        slice.size = centralDirSize;
-        initCentralDirectory(file.open(uri, slice));
-        initCompressedOffset();
+        // 中央目录紧邻 EOCD 之前, 若已落在 tail 内(校验签名)则直接解析, 否则再单独请求
+        int cdStart = eocdIdxInTail - centralDirSize;
+        boolean cdInTail = cdStart >= 0
+                && ByteBuffer.wrap(tail, cdStart, 4).order(ByteOrder.LITTLE_ENDIAN).getInt() == CENTRAL_DIR_SIGNATURE;
+        if (cdInTail) {
+            initCentralDirectory(Arrays.copyOfRange(tail, cdStart, eocdIdxInTail));
+        } else {
+            var s = new Slice();
+            s.offset = centralDirOffset;
+            s.size = centralDirSize;
+            initCentralDirectory(file.open(uri, s));
+        }
+        // 不再预取所有条目的本地头(initCompressedOffset), 改为按需在 load 时惰性获取
         initContent();
     }
 
@@ -188,6 +197,7 @@ public class LazyEpub implements Book {
             if (signature == EOCD_SIGNATURE) {
                 centralDirSize = ByteBuffer.wrap(endBytes, i + 12, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
                 centralDirOffset = ByteBuffer.wrap(endBytes, i + 16, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
+                eocdIdxInTail = i;
                 return true;
             }
         }
@@ -304,36 +314,6 @@ public class LazyEpub implements Book {
         }
     }
 
-    private void initCompressedOffset() throws Exception {
-        var slices = new ArrayList<Slice>();
-        var slice_to_key = new HashMap<Slice, String>();
-        for (var kv : zip_dir.entrySet()) {
-            var slice = new Slice();
-            slice.size = 64;
-            var entry = kv.getValue();
-            slice.offset = Math.toIntExact(entry.localHeaderOffset);
-            slices.add(slice);
-            slice_to_key.put(slice, kv.getKey());
-        }
-        var files = file.open(uri, slices);
-        for (var idx = 0; idx < slices.size(); ++idx) {
-            var slice = slices.get(idx);
-            var data = files.get(slice);
-            var key = slice_to_key.get(slice);
-            // assert 在 Android 上默认关闭, 这里用显式判空兜底, 缺失的 range 跳过而不是 NPE
-            if (data == null || key == null) {
-                continue;
-            }
-            var entry = zip_dir.get(key);
-            if (entry == null) {
-                continue;
-            }
-            long dataOffset = entry.localHeaderOffset + parseDataOffset(data);
-            entry.SetCompressedOffset((int) dataOffset);
-        }
-    }
-
-
     private String cut(String filename) {
         while (filename.startsWith(".") || filename.startsWith("/")) {
             filename = filename.substring(1);
@@ -355,8 +335,7 @@ public class LazyEpub implements Book {
     }
 
     private void load_file_to_cache(List<String> filenames) throws Exception {
-        var slices = new ArrayList<Slice>();
-        var slicesToFile = new HashMap<Slice, String>();
+        var needed = new ArrayList<String>();
         for (var filename : filenames) {
             filename = cut(filename);
             if (cacheHas(filename)) {
@@ -367,53 +346,113 @@ public class LazyEpub implements Book {
             }
             var entry = zip_dir.get(filename);
             assert entry != null;
-            // 空文件没有压缩数据, 直接缓存空字节; 否则 size=0 会生成 "offset-(offset-1)" 的非法反向 Range
+            // 空文件没有压缩数据, 直接缓存空字节; 否则 size=0 会生成非法反向 Range
             if (entry.compressedSize == 0) {
                 cachePut(filename, new byte[0]);
                 continue;
             }
-            var slice = new Slice();
-            long dataOffset = entry.compressedOffset;
-            slice.offset = Math.toIntExact(dataOffset);
-            slice.size = Math.toIntExact(entry.compressedSize);
-            slices.add(slice);
-            slicesToFile.put(slice, filename);
+            needed.add(filename);
         }
-        if (slices.isEmpty()) {
+        if (needed.isEmpty()) {
             return;
         }
-        var sliceToBytes = file.open(uri, slices);
-        for (var kv : sliceToBytes.entrySet()) {
-            var slice = kv.getKey();
-            var bytes = kv.getValue();
-            var filename = slicesToFile.get(slice);
-            if (filename == null) {
+        if (needed.size() == 1) {
+            // 单文件: 本地头 + 压缩数据一次取回, 省一轮往返
+            var f = needed.get(0);
+            overReadOne(f, zip_dir.get(f));
+        } else {
+            // 多文件: 先批量取本地头定位数据偏移, 再批量取精确数据 (避免 range 重叠被服务器合并)
+            twoPhase(needed);
+        }
+    }
+
+    // 单文件惰性加载: 一次读回 [本地头 + 压缩数据], 按真实偏移裁切
+    private void overReadOne(String filename, CentralDirEntry entry) throws Exception {
+        var slice = new Slice();
+        slice.offset = Math.toIntExact(entry.localHeaderOffset);
+        long span = 30L + entry.fileName.getBytes(StandardCharsets.UTF_8).length
+                + HEADER_SLACK + entry.compressedSize;
+        slice.size = Math.toIntExact(span);
+        byte[] raw = file.open(uri, slice);
+        int size = Math.toIntExact(entry.compressedSize);
+        if (raw == null || raw.length < parseDataOffset(raw) + size) {
+            // 冗余不够(超大扩展字段), 走精确两段式兜底
+            var one = new ArrayList<String>();
+            one.add(filename);
+            twoPhase(one);
+            return;
+        }
+        int dataStart = (int) parseDataOffset(raw);
+        store(filename, entry, Arrays.copyOfRange(raw, dataStart, dataStart + size));
+    }
+
+    // 多文件惰性加载: 阶段1批量取本地头(小区间)定位偏移, 阶段2批量取精确压缩数据
+    private void twoPhase(List<String> filenames) throws Exception {
+        var headSlices = new ArrayList<Slice>();
+        var headToFile = new HashMap<Slice, String>();
+        for (var filename : filenames) {
+            var entry = zip_dir.get(filename);
+            if (entry == null) {
+                continue;
+            }
+            var s = new Slice();
+            s.offset = Math.toIntExact(entry.localHeaderOffset);
+            s.size = 48; // 只需读到本地头的文件名/扩展字段长度字段
+            headSlices.add(s);
+            headToFile.put(s, filename);
+        }
+        var heads = file.open(uri, headSlices);
+        var dataSlices = new ArrayList<Slice>();
+        var dataToFile = new HashMap<Slice, String>();
+        for (var s : headSlices) {
+            var head = heads.get(s);
+            var filename = headToFile.get(s);
+            if (head == null || filename == null) {
                 continue;
             }
             var entry = zip_dir.get(filename);
             if (entry == null) {
                 continue;
             }
-            if (entry.compressionMethod == 0) {
-                cachePut(filename, bytes);
-            } else if (entry.compressionMethod == 8) {
-                Inflater decompresser = new Inflater(true);
-                decompresser.setInput(bytes);
-                ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-                byte[] buffer = new byte[1024];
-                try {
-                    while (!decompresser.finished()) {
-                        int count = decompresser.inflate(buffer); // 解压数据块
-                        outputStream.write(buffer, 0, count);
-                    }
-                } finally {
-                    decompresser.end(); // 必须手动释放资源
-                }
-                var output = outputStream.toByteArray();
-                cachePut(filename, output);
-            } else {
-                throw new IllegalArgumentException("无法解压epub: " + entry.compressionMethod);
+            var d = new Slice();
+            d.offset = Math.toIntExact(entry.localHeaderOffset + parseDataOffset(head));
+            d.size = Math.toIntExact(entry.compressedSize);
+            dataSlices.add(d);
+            dataToFile.put(d, filename);
+        }
+        var datas = file.open(uri, dataSlices);
+        for (var s : dataSlices) {
+            var data = datas.get(s);
+            var filename = dataToFile.get(s);
+            if (data == null || filename == null) {
+                continue;
             }
+            store(filename, zip_dir.get(filename), data);
+        }
+    }
+
+    private void store(String filename, CentralDirEntry entry, byte[] compressed) throws Exception {
+        if (entry.compressionMethod == 0) {
+            cachePut(filename, compressed);
+        } else if (entry.compressionMethod == 8) {
+            Inflater inflater = new Inflater(true);
+            inflater.setInput(compressed);
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            byte[] buffer = new byte[8192];
+            try {
+                while (!inflater.finished()) {
+                    int n = inflater.inflate(buffer);
+                    if (n == 0) {
+                        break; // needsInput/needsDictionary, 避免死循环
+                    }
+                    out.write(buffer, 0, n);
+                }
+            } finally {
+                inflater.end();
+            }
+            cachePut(filename, out.toByteArray());
+        } else {
+            throw new IllegalArgumentException("无法解压epub: " + entry.compressionMethod);
         }
     }
 
@@ -441,7 +480,6 @@ public class LazyEpub implements Book {
         public final long localHeaderOffset;
         public final int compressionMethod;
         public final int extraFieldLength;
-        public int compressedOffset;
 
         public CentralDirEntry(String fileName, long compressedSize, long uncompressedSize, long localHeaderOffset, int compressionMethod, int extraFieldLength) {
             this.fileName = fileName;
@@ -450,10 +488,6 @@ public class LazyEpub implements Book {
             this.localHeaderOffset = localHeaderOffset;
             this.compressionMethod = compressionMethod;
             this.extraFieldLength = extraFieldLength;
-        }
-
-        public void SetCompressedOffset(int compressedOffset) {
-            this.compressedOffset = compressedOffset;
         }
     }
 }
