@@ -7,6 +7,7 @@ import android.os.Looper;
 import android.util.Pair;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.ViewGroup;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
@@ -19,7 +20,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.io.ByteArrayInputStream;
 import java.text.DecimalFormat;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -30,6 +30,8 @@ public class ComicActivity extends AppCompatActivity {
 
     private final BlockingQueue<Pair<Integer, Integer>> taskQueue = new LinkedBlockingQueue<>();
     private final ExecutorService executor = Executors.newFixedThreadPool(1);
+    // 当前页的加载放到这个线程, 避免在 UI 线程上做网络 IO 造成 ANR
+    private final ExecutorService loadExecutor = Executors.newSingleThreadExecutor();
 
     private WebView ComicViewLeft;
     private WebView ComicViewRight;
@@ -116,20 +118,28 @@ public class ComicActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         executor.shutdownNow();
+        loadExecutor.shutdownNow();
+        // 规范销毁 WebView 以释放其 native 内存 (取代原来独立进程+killProcess 的做法)
+        destroyWebView(ComicViewLeft);
+        destroyWebView(ComicViewRight);
         super.onDestroy();
-        android.os.Process.killProcess(android.os.Process.myPid());
-        System.exit(0);
     }
 
-    public void show_new_page(WebView view, int page) throws Exception {
-        prepare_pages(5);
-        final CountDownLatch latch = new CountDownLatch(1);
-        new Thread(() -> {
-            epub_book.prepare(page, page + 1);
-            latch.countDown();
-        }).start();
-        latch.await();
-        var html = epub_book.page(page);
+    private void destroyWebView(WebView view) {
+        if (view == null) {
+            return;
+        }
+        var parent = view.getParent();
+        if (parent instanceof ViewGroup) {
+            ((ViewGroup) parent).removeView(view);
+        }
+        view.stopLoading();
+        view.loadUrl("about:blank");
+        view.removeAllViews();
+        view.destroy();
+    }
+
+    public void show_new_page(WebView view, String html) {
         view.scrollTo(0, 0);
         view.setWebViewClient(new WebViewClient() {
             @Override
@@ -162,7 +172,7 @@ public class ComicActivity extends AppCompatActivity {
             epub_book_page = Math.max(0, epub_book_page - 2);
             page_changed = true;
         } else if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-            epub_book_page = Math.min(epub_book.total_pages() - 2, epub_book_page + 2);
+            epub_book_page = Math.max(0, Math.min(epub_book.total_pages() - 2, epub_book_page + 2));
             page_changed = true;
         }
         if (page_changed) {
@@ -173,13 +183,37 @@ public class ComicActivity extends AppCompatActivity {
     }
 
     private void notifyPageChanged() {
-        try {
-            show_new_page(ComicViewLeft, epub_book_page);
-            show_new_page(ComicViewRight, epub_book_page + 1);
-            pageView.setText(getString(R.string.page, epub_book_page + 1, epub_book.total_pages()));
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        final int total = epub_book.total_pages();
+        final int leftPage = Math.max(0, Math.min(epub_book_page, total - 1));
+        epub_book_page = leftPage;
+        final int rightPage = leftPage + 1;
+        loadExecutor.execute(() -> {
+            try {
+                epub_book.prepare(leftPage, Math.min(rightPage + 1, total));
+            } catch (Exception ignore) {
+            }
+            final String leftHtml = leftPage < total ? epub_book.page(leftPage) : null;
+            final String rightHtml = rightPage < total ? epub_book.page(rightPage) : null;
+            runOnUiThread(() -> {
+                if (isDestroyed()) {
+                    return;
+                }
+                if (leftHtml != null) {
+                    show_new_page(ComicViewLeft, leftHtml);
+                }
+                if (rightHtml != null) {
+                    show_new_page(ComicViewRight, rightHtml);
+                } else {
+                    // 奇数页时最后一屏右侧无内容, 清空避免残留上一页
+                    ComicViewRight.loadDataWithBaseURL(null, "", "text/html", "UTF-8", null);
+                }
+                pageView.setText(getString(R.string.page, leftPage + 1, total));
+                try {
+                    prepare_pages(5);
+                } catch (InterruptedException ignore) {
+                }
+            });
+        });
     }
 
     public void prepare_pages(int n) throws InterruptedException {

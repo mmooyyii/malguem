@@ -6,6 +6,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.ViewGroup;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
@@ -18,7 +19,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.io.ByteArrayInputStream;
 import java.text.DecimalFormat;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -40,6 +40,8 @@ public class NovelActivity extends AppCompatActivity {
 
     private final BlockingQueue<Integer> taskQueue = new LinkedBlockingQueue<>();
     private final ExecutorService executor = Executors.newFixedThreadPool(1);
+    // 当前页的加载放到这个线程, 避免在 UI 线程上做网络 IO 造成 ANR
+    private final ExecutorService loadExecutor = Executors.newSingleThreadExecutor();
 
     @SuppressLint("SetJavaScriptEnabled")
     @Override
@@ -89,9 +91,24 @@ public class NovelActivity extends AppCompatActivity {
     @Override
     protected void onDestroy() {
         executor.shutdownNow();
+        loadExecutor.shutdownNow();
+        // 规范销毁 WebView 以释放其 native 内存 (取代原来独立进程+killProcess 的做法)
+        destroyWebView(novelView);
         super.onDestroy();
-        android.os.Process.killProcess(android.os.Process.myPid());
-        System.exit(0);
+    }
+
+    private void destroyWebView(WebView view) {
+        if (view == null) {
+            return;
+        }
+        var parent = view.getParent();
+        if (parent instanceof ViewGroup) {
+            ((ViewGroup) parent).removeView(view);
+        }
+        view.stopLoading();
+        view.loadUrl("about:blank");
+        view.removeAllViews();
+        view.destroy();
     }
 
     public void prepare_pages(int n) throws InterruptedException {
@@ -103,16 +120,7 @@ public class NovelActivity extends AppCompatActivity {
         }
     }
 
-    public void show_new_page(int page, int page_offset) throws Exception {
-        final CountDownLatch latch = new CountDownLatch(1);
-        new Thread(() -> {
-            // 执行同步 HTTP 请求（示例使用 HttpURLConnection）
-            epub_book.prepare(page, page + 1);
-            latch.countDown();
-        }).start();
-        prepare_pages(5);
-        latch.await();
-        var html = epub_book.page(page);
+    public void show_new_page(String html, int page_offset) {
         novelView.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -131,8 +139,13 @@ public class NovelActivity extends AppCompatActivity {
                     return super.shouldInterceptRequest(view, request);
                 }
             }
+
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                // 内容布局完成后再恢复滚动位置; 在 loadData 之前 scrollTo 会被加载重置, 恢复无效
+                view.scrollTo(0, page_offset);
+            }
         });
-        novelView.scrollTo(0, page_offset);
         novelView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
     }
 
@@ -146,7 +159,7 @@ public class NovelActivity extends AppCompatActivity {
             epub_book_page = Math.max(0, epub_book_page - 1);
         } else if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
             page_changed = true;
-            epub_book_page = Math.min(epub_book.total_pages() - 1, epub_book_page + 1);
+            epub_book_page = Math.max(0, Math.min(epub_book.total_pages() - 1, epub_book_page + 1));
         }
         if (page_changed) {
             notifyPageChanged(0);
@@ -156,12 +169,29 @@ public class NovelActivity extends AppCompatActivity {
     }
 
     private void notifyPageChanged(int page_offset) {
-        try {
-            show_new_page(epub_book_page, page_offset);
-            pageView.setText(getString(R.string.page, (epub_book_page + 1), epub_book.total_pages()));
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
+        final int total = epub_book.total_pages();
+        final int page = Math.max(0, Math.min(epub_book_page, total - 1));
+        epub_book_page = page;
+        loadExecutor.execute(() -> {
+            try {
+                epub_book.prepare(page, page + 1);
+            } catch (Exception ignore) {
+            }
+            final String html = total > 0 ? epub_book.page(page) : null;
+            runOnUiThread(() -> {
+                if (isDestroyed()) {
+                    return;
+                }
+                if (html != null) {
+                    show_new_page(html, page_offset);
+                }
+                pageView.setText(getString(R.string.page, page + 1, total));
+                try {
+                    prepare_pages(5);
+                } catch (InterruptedException ignore) {
+                }
+            });
+        });
     }
 
     private class OpenEpub {

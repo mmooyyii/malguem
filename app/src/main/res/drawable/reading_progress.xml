@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 书封底部的阅读进度条 (白色, 叠在封面上) -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@android:id/background">
+        <shape android:shape="rectangle">
+            <solid android:color="#4DFFFFFF" />
+            <corners android:radius="100dp" />
+        </shape>
+    </item>
+    <item android:id="@android:id/progress">
+        <clip>
+            <shape android:shape="rectangle">
+                <solid android:color="#FFFFFFFF" />
+                <corners android:radius="100dp" />
+            </shape>
+        </clip>
+    </item>
+</layer-list>

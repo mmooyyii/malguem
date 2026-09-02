@@ -9,12 +9,13 @@ import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.EditText;
-import android.widget.ListView;
 import android.widget.Toast;
 
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.recyclerview.widget.GridLayoutManager;
+import androidx.recyclerview.widget.RecyclerView;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -48,65 +49,76 @@ public class MainActivity extends AppCompatActivity {
     }
 
     public void setup_file_list() {
-        ListView fileListView = findViewById(R.id.fileListView);
+        RecyclerView fileListView = findViewById(R.id.fileListView);
+        fileListView.setLayoutManager(new GridLayoutManager(this, 5));
+        fileListView.setItemAnimator(null);
+        fileListView.setHasFixedSize(true);
         fileListAdapter = new FileListAdapter(this);
         fileListView.setAdapter(fileListAdapter);
-        fileListView.setOnItemLongClickListener((parent, view, position, id) -> {
-            var file = fileListAdapter.getItem(position);
-            assert file != null;
-            if (file.type == ListItem.FileType.Resource) {
-                showDeleteConfirmationDialog(file.id);
-            } else if (file.type == ListItem.FileType.Epub) {
-                var db = Database.getInstance(this).getDatabase();
-                db.switch_view_type(file.id, make_uri(file.name));
-                new FetchFileListTask().executeTask();
+        fileListAdapter.setOnItemAction(new FileListAdapter.OnItemAction() {
+            @Override
+            public void onClick(ListItem file) {
+                onFileClicked(file);
             }
-            return true;
-        });
 
-        fileListView.setOnItemClickListener((parent, view, position, id) -> {
-            var file = fileListAdapter.getItem(position);
-            assert file != null;
-            switch (file.type) {
-                case AddWebDav: {
-                    showLoginDialog();
-                    break;
-                }
-                case Resource: {
-                    var db = Database.getInstance(this).getDatabase();
-                    client = db.get_webdav(file.id);
-                    current_resource_id = file.id;
-                    if (client == null) {
-                        android.widget.Toast.makeText(MainActivity.this, "数据库异常", Toast.LENGTH_SHORT).show();
-                    } else {
-                        new FetchFileListTask().executeTask();
-                    }
-                    break;
-                }
-                case Dir: {
-                    pwd.add(file.name);
-                    new FetchFileListTask().executeTask();
-                    break;
-                }
-                case Epub: {
-                    var db = Database.getInstance(this).getDatabase();
-                    var info = db.get_epub_info(file.id, make_uri(file.name));
-                    Intent intent;
-                    if (info.view_type == ListItem.ViewType.Comic) {
-                        intent = new Intent(MainActivity.this, ComicActivity.class);
-                    } else {
-                        intent = new Intent(MainActivity.this, NovelActivity.class);
-                    }
-                    intent.putExtra("resource_id", file.id);
-                    intent.putExtra("book_uri", make_uri(file.name));
-                    intent.putExtra("client", client.to_json());
-
-                    launcher.launch(intent);
-                    break;
-                }
+            @Override
+            public boolean onLongClick(ListItem file) {
+                return onFileLongClicked(file);
             }
         });
         init_resource_list();
+    }
+
+    private boolean onFileLongClicked(ListItem file) {
+        if (file.type == ListItem.FileType.Resource) {
+            showDeleteConfirmationDialog(file.id);
+        } else if (file.type == ListItem.FileType.Epub) {
+            var db = Database.getInstance(this).getDatabase();
+            db.switch_view_type(file.id, make_uri(file.name));
+            new FetchFileListTask().executeTask();
+        }
+        return true;
+    }
+
+    private void onFileClicked(ListItem file) {
+        switch (file.type) {
+            case AddWebDav: {
+                showLoginDialog();
+                break;
+            }
+            case Resource: {
+                var db = Database.getInstance(this).getDatabase();
+                client = db.get_webdav(file.id);
+                current_resource_id = file.id;
+                if (client == null) {
+                    android.widget.Toast.makeText(MainActivity.this, "数据库异常", Toast.LENGTH_SHORT).show();
+                } else {
+                    new FetchFileListTask().executeTask();
+                }
+                break;
+            }
+            case Dir: {
+                pwd.add(file.name);
+                new FetchFileListTask().executeTask();
+                break;
+            }
+            case Epub: {
+                var db = Database.getInstance(this).getDatabase();
+                var info = db.get_epub_info(file.id, make_uri(file.name));
+                Intent intent;
+                if (info.view_type == ListItem.ViewType.Comic) {
+                    intent = new Intent(MainActivity.this, ComicActivity.class);
+                } else {
+                    intent = new Intent(MainActivity.this, NovelActivity.class);
+                }
+                intent.putExtra("resource_id", file.id);
+                intent.putExtra("book_uri", make_uri(file.name));
+                intent.putExtra("client", client.to_json());
+
+                launcher.launch(intent);
+                break;
+            }
+        }
     }
 
     private void showDeleteConfirmationDialog(int id) {
@@ -179,12 +191,10 @@ public class MainActivity extends AppCompatActivity {
     public void init_resource_list() {
         at_root_list = true;
         var db = Database.getInstance(this).getDatabase();
-        fileListAdapter.clear();
-        for (var file : db.resource_list()) {
-            fileListAdapter.addAll(file);
-        }
-        fileListAdapter.addAll(new ListItem(0, "新增webdav", ListItem.FileType.AddWebDav));
-        fileListAdapter.notifyDataSetChanged();
+        var list = new ArrayList<ListItem>(db.resource_list());
+        list.add(new ListItem(0, "新增webdav", ListItem.FileType.AddWebDav));
+        fileListAdapter.setClient(null);
+        fileListAdapter.setItems(list);
     }
 
     @Override
@@ -218,20 +228,22 @@ public class MainActivity extends AppCompatActivity {
                 try {
                     fileList = client.ls(current_resource_id, pwd);
                 } catch (Exception e) {
-                    Toast.makeText(MainActivity.this, "http请求失败", Toast.LENGTH_SHORT).show();
+                    // 这里在后台线程, Toast 必须切回主线程, 否则会抛 "Can't toast on a thread that has not called Looper.prepare()"
+                    handler.post(() -> Toast.makeText(MainActivity.this, "http请求失败", Toast.LENGTH_SHORT).show());
                     return;
                 }
                 var epubs = new ArrayList<String>();
                 for (var file : fileList) {
                     if (file.type == ListItem.FileType.Epub) {
-                        epubs.add(make_uri(file.name));
+                        file.uri = make_uri(file.name);
+                        epubs.add(file.uri);
                     }
                 }
                 var db = Database.getInstance(MainActivity.this).getDatabase();
                 var map = db.get_view_types(current_resource_id, epubs);
                 for (var file : fileList) {
-                    if (file.type == ListItem.FileType.Epub && map.containsKey(make_uri(file.name))) {
-                        var info = map.get(make_uri(file.name));
+                    if (file.type == ListItem.FileType.Epub && map.containsKey(file.uri)) {
+                        var info = map.get(file.uri);
                         assert info != null;
                         file.view_type = info.view_type;
                         file.total_page = info.total_page;
@@ -240,11 +252,8 @@ public class MainActivity extends AppCompatActivity {
                 }
                 final var finalFileList = fileList;
                 handler.post(() -> {
-                    fileListAdapter.clear();
-                    for (var file : finalFileList) {
-                        fileListAdapter.addAll(file);
-                    }
-                    fileListAdapter.notifyDataSetChanged();
+                    fileListAdapter.setClient(client);
+                    fileListAdapter.setItems(finalFileList);
                 });
             });
         }

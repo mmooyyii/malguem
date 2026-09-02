@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="@dimen/card_margin"
+    android:orientation="vertical"
+    android:clickable="true"
+    android:focusable="true"
+    android:defaultFocusHighlightEnabled="false"
+    android:foreground="@drawable/card_foreground"
+    android:stateListAnimator="@animator/sla_focus">
+
+    <FrameLayout
+        android:id="@+id/cover"
+        android:layout_width="match_parent"
+        android:layout_height="@dimen/cover_height"
+        android:background="@drawable/cover_tile">
+
+        <!-- 生成书封时的标题文字 (无封面图时显示) -->
+        <TextView
+            android:id="@+id/coverTitle"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="top|start"
+            android:padding="16dp"
+            android:ellipsize="end"
+            android:maxLines="5"
+            android:visibility="gone"
+            style="@style/Text.CoverTitle" />
+
+        <!-- 目录/资源/新增的图标 -->
+        <ImageView
+            android:id="@+id/coverIcon"
+            android:layout_width="@dimen/cover_icon"
+            android:layout_height="@dimen/cover_icon"
+            android:layout_gravity="center"
+            android:contentDescription="@null"
+            android:visibility="gone" />
+
+        <!-- 生成书封的书脊阴影 -->
+        <View
+            android:id="@+id/coverSpine"
+            android:layout_width="5dp"
+            android:layout_height="match_parent"
+            android:layout_gravity="start"
+            android:background="#26000000"
+            android:visibility="gone" />
+
+        <!-- 真实封面图 (加载成功后显示, 盖住上面的兜底封面) -->
+        <ImageView
+            android:id="@+id/coverImage"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@drawable/cover_tile"
+            android:contentDescription="@null"
+            android:scaleType="centerCrop"
+            android:visibility="gone" />
+
+        <!-- 阅读进度条 -->
+        <ProgressBar
+            android:id="@+id/coverProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="5dp"
+            android:layout_gravity="bottom"
+            android:layout_marginStart="10dp"
+            android:layout_marginEnd="10dp"
+            android:layout_marginBottom="10dp"
+            android:max="100"
+            android:progress="0"
+            android:progressDrawable="@drawable/reading_progress"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <TextView
+        android:id="@+id/caption"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        style="@style/Text.Caption" />
+
+    <TextView
+        android:id="@+id/sub"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:visibility="gone"
+        style="@style/Text.Sub" />
+</LinearLayout>

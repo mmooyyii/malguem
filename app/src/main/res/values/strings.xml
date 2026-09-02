@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">malguem</string>
+    <string name="my_library">我的书库</string>
     <string name="opening_epub">正在打开epub</string>
     <string name="parse_epub">解析epub中</string>
     <string name="load_percent">已完成 %1$s MB / %2$s MB</string>

@@ -35,12 +35,8 @@
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity
-            android:name=".NovelActivity"
-            android:process=":webview_process" />
-        <activity
-            android:name=".ComicActivity"
-            android:process=":webview_process" />
+        <activity android:name=".NovelActivity" />
+        <activity android:name=".ComicActivity" />
     </application>
 
 </manifest>

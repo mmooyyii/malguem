@@ -1,0 +1,49 @@
+<resources>
+
+    <style name="Text.Header" parent="android:Widget.TextView">
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textSize">@dimen/text_header</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">-0.01</item>
+    </style>
+
+    <style name="Text.CoverTitle" parent="android:Widget.TextView">
+        <item name="android:textColor">@color/on_cover</item>
+        <item name="android:textSize">@dimen/text_cover_title</item>
+        <item name="android:fontFamily">serif</item>
+        <item name="android:lineSpacingMultiplier">1.05</item>
+        <item name="android:shadowColor">#40000000</item>
+        <item name="android:shadowDx">0</item>
+        <item name="android:shadowDy">1</item>
+        <item name="android:shadowRadius">3</item>
+    </style>
+
+    <style name="Text.Caption" parent="android:Widget.TextView">
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textSize">@dimen/text_caption</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Text.Sub" parent="android:Widget.TextView">
+        <item name="android:textColor">@color/ink_muted</item>
+        <item name="android:textSize">@dimen/text_sub</item>
+    </style>
+
+    <style name="Text.DialogLabel" parent="android:Widget.TextView">
+        <item name="android:textColor">@color/ink_muted</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.02</item>
+    </style>
+
+    <style name="Edit.Field" parent="Widget.AppCompat.EditText">
+        <item name="android:background">@drawable/edit_bg</item>
+        <item name="android:textColor">@color/ink</item>
+        <item name="android:textColorHint">@color/ink_muted</item>
+        <item name="android:paddingLeft">14dp</item>
+        <item name="android:paddingRight">14dp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingBottom">10dp</item>
+    </style>
+
+</resources>

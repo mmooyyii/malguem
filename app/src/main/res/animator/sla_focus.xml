@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Apple TV 风格焦点效果: 聚焦时放大并抬升 -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:valueTo="1.12"
+                android:valueType="floatType"
+                android:duration="160" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:valueTo="1.12"
+                android:valueType="floatType"
+                android:duration="160" />
+            <objectAnimator
+                android:propertyName="translationZ"
+                android:valueTo="10dp"
+                android:duration="160" />
+        </set>
+    </item>
+    <item>
+        <set>
+            <objectAnimator
+                android:propertyName="scaleX"
+                android:valueTo="1.0"
+                android:valueType="floatType"
+                android:duration="160" />
+            <objectAnimator
+                android:propertyName="scaleY"
+                android:valueTo="1.0"
+                android:valueType="floatType"
+                android:duration="160" />
+            <objectAnimator
+                android:propertyName="translationZ"
+                android:valueTo="0dp"
+                android:duration="160" />
+        </set>
+    </item>
+</selector>

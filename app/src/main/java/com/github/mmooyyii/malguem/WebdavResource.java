@@ -115,15 +115,51 @@ public class WebdavResource implements ResourceInterface {
             if (response.isSuccessful()) {
                 assert response.body() != null;
                 var bytes = response.body().bytes();
+                var contentType = response.header("Content-Type");
+                if (contentType != null && contentType.toLowerCase().startsWith("multipart/byteranges")) {
+                    return SplitMultipleRanges(bytes, slices);
+                }
+                if (response.code() == 200) {
+                    // 服务器忽略了 Range 头, 返回了整个文件, 在本地按请求切片
+                    return sliceLocally(bytes, slices);
+                }
+                // 单段 206 响应 (无论请求了几段)
+                var output = new HashMap<Slice, byte[]>();
                 if (slices.size() == 1) {
-                    var output = new HashMap<Slice, byte[]>();
                     output.put(slices.get(0), bytes);
                     return output;
                 }
-                return SplitMultipleRanges(bytes);
+                var contentRange = response.header("Content-Range");
+                var returned = contentRange == null ? null : extractRange(contentRange);
+                if (returned != null) {
+                    for (var slice : slices) {
+                        if (slice.offset.equals(returned.offset)) {
+                            output.put(slice, bytes);
+                        }
+                    }
+                }
+                return output;
             }
         }
         throw new IOException("http 请求失败, 打不开" + url);
+    }
+
+    // 服务器不支持 Range 而返回整个文件时, 在本地按请求的 offset/size 切片
+    private HashMap<Slice, byte[]> sliceLocally(byte[] bytes, List<Slice> slices) {
+        var output = new HashMap<Slice, byte[]>();
+        for (var slice : slices) {
+            int off = slice.offset;
+            if (off < 0) {
+                off = bytes.length + off; // 后缀 range, 如 -22
+            }
+            int size = slice.size == null ? bytes.length - off : slice.size;
+            int from = Math.max(0, off);
+            int to = Math.min(bytes.length, from + size);
+            if (from <= to) {
+                output.put(slice, Arrays.copyOfRange(bytes, from, to));
+            }
+        }
+        return output;
     }
 
     static class Buffer {
@@ -147,8 +183,9 @@ public class WebdavResource implements ResourceInterface {
         }
 
         void add(byte b) {
-            if (buffer_index + 1 == buffer.length) {
-                buffer = new byte[buffer.length * 3 / 2];
+            if (buffer_index == buffer.length) {
+                // 必须用 copyOf 保留已有内容, 否则扩容会丢弃之前累积的字节
+                buffer = Arrays.copyOf(buffer, buffer.length * 3 / 2);
             }
             buffer[buffer_index++] = b;
         }
@@ -170,7 +207,13 @@ public class WebdavResource implements ResourceInterface {
         }
     }
 
-    private HashMap<Slice, byte[]> SplitMultipleRanges(byte[] bytes) {
+    private HashMap<Slice, byte[]> SplitMultipleRanges(byte[] bytes, List<Slice> requested) {
+        // 按 offset 建索引, 把解析出的分段映射回调用方持有的 Slice 实例,
+        // 否则响应里 size=end-start+1 的新 Slice 与请求 Slice 的 equals/hashCode 不一致, 查不到结果
+        var byOffset = new HashMap<Integer, Slice>();
+        for (var s : requested) {
+            byOffset.put(s.offset, s);
+        }
         var output = new HashMap<Slice, byte[]>();
         var buffer = new Buffer();
         Slice slice = null;
@@ -182,7 +225,9 @@ public class WebdavResource implements ResourceInterface {
                 if (buffer.isContentRanges()) {
                     slice = extractRange(buffer.to_string());
                 } else if (buffer.StartWithRN() && slice != null) {
-                    output.put(slice, Arrays.copyOfRange(bytes, idx, idx + slice.size));
+                    var data = Arrays.copyOfRange(bytes, idx, idx + slice.size);
+                    var key = byOffset.get(slice.offset);
+                    output.put(key != null ? key : slice, data);
                     idx += slice.size;
                     slice = null;
                 }

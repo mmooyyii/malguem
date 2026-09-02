@@ -1,5 +1,12 @@
 <resources>
-<!-- Base application theme. -->
-<style name="Theme.Malguem" parent="Theme.AppCompat.Light.NoActionBar">
-</style>
+    <!-- Base application theme. Apple Books 风格浅色主题 -->
+    <style name="Theme.Malguem" parent="Theme.AppCompat.Light.NoActionBar">
+        <item name="android:windowBackground">@drawable/bg_window</item>
+        <item name="colorPrimary">@color/accent</item>
+        <item name="colorPrimaryDark">@color/accent_dark</item>
+        <item name="colorAccent">@color/accent</item>
+        <item name="android:textColorPrimary">@color/ink</item>
+        <item name="android:textColorSecondary">@color/ink_muted</item>
+        <item name="android:textColorHint">@color/ink_muted</item>
+    </style>
 </resources>

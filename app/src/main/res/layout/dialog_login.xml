@@ -3,65 +3,52 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
-    android:padding="16dp">
+    android:paddingLeft="24dp"
+    android:paddingTop="20dp"
+    android:paddingRight="24dp"
+    android:paddingBottom="8dp">
 
-    <!-- URL 部分 -->
-    <LinearLayout
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="URL"
+        style="@style/Text.DialogLabel" />
+
+    <EditText
+        android:id="@+id/et_url"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:layout_marginTop="6dp"
+        android:inputType="textUri"
+        style="@style/Edit.Field" />
 
-        <TextView
-            android:layout_width="80dp"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:paddingRight="8dp"
-            android:text="Url" />
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="用户名"
+        style="@style/Text.DialogLabel" />
 
-        <EditText
-            android:id="@+id/et_url"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1" />
-    </LinearLayout>
-
-    <!-- 用户名部分 -->
-    <LinearLayout
+    <EditText
+        android:id="@+id/et_username"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
+        android:layout_marginTop="6dp"
+        android:inputType="text"
+        style="@style/Edit.Field" />
 
-        <TextView
-            android:layout_width="80dp"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:paddingRight="8dp"
-            android:text="用户名" />
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="16dp"
+        android:text="密码"
+        style="@style/Text.DialogLabel" />
 
-        <EditText
-            android:id="@+id/et_username"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1" />
-    </LinearLayout>
-
-    <!-- 密码部分 -->
-    <LinearLayout
+    <EditText
+        android:id="@+id/et_password"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal">
-
-        <TextView
-            android:layout_width="80dp"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:paddingRight="8dp"
-            android:text="密码" />
-
-        <EditText
-            android:id="@+id/et_password"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1" />
-    </LinearLayout>
+        android:layout_marginTop="6dp"
+        android:inputType="text"
+        style="@style/Edit.Field" />
 </LinearLayout>

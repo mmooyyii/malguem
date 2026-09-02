@@ -14,6 +14,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.Inflater;
@@ -31,7 +32,11 @@ public class LazyEpub implements Book {
     // resource map
     List<String> contents; // page -> html
 
-    ConcurrentHashMap<String, byte[]> resource; // name -> html
+    // name -> 解压后的字节, 带容量上限的 LRU, 防止长时间阅读时无限增长导致 OOM
+    private final LinkedHashMap<String, byte[]> resource = new LinkedHashMap<>(16, 0.75f, true);
+    private long cacheBytes = 0;
+    private static final long MAX_CACHE_BYTES = 64L * 1024 * 1024;
+
     ConcurrentHashMap<String, String> resource_type; // name -> media_type name
     ConcurrentHashMap<String, CentralDirEntry> zip_dir; // page -> (offset,size)
 
@@ -40,22 +45,30 @@ public class LazyEpub implements Book {
     Integer centralDirSize;
 
     String opf_file;
+    String cover_href; // 封面图片在 epub 内的路径, 没有则为 null
 
     public LazyEpub(String epub_uri, ResourceInterface client) throws Exception {
         uri = epub_uri;
         file = client;
         contents = new ArrayList<>();
-        resource = new ConcurrentHashMap<>();
         zip_dir = new ConcurrentHashMap<>();
         resource_type = new ConcurrentHashMap<>();
         init_epub_dir();
     }
 
     private void init_epub_dir() throws Exception {
-        // 请求ZIP文件末尾的22字节（End of Central Directory最小长度）
+        // 先请求ZIP文件末尾的22字节（End of Central Directory最小长度）
         var slice = new Slice();
         slice.offset = -22;
-        initCentralDirLocate(file.open(uri, slice));
+        if (!initCentralDirLocate(file.open(uri, slice))) {
+            // ZIP 可能带注释, EOCD 不在最后 22 字节内, 扩大后缀范围重试 (22 + 最大注释长度 65535)
+            slice = new Slice();
+            slice.offset = -65557;
+            if (!initCentralDirLocate(file.open(uri, slice))) {
+                throw new IllegalArgumentException("EOCD signature not found");
+            }
+        }
+        slice = new Slice();
         slice.offset = centralDirOffset;
         slice.size = centralDirSize;
         initCentralDirectory(file.open(uri, slice));
@@ -63,11 +76,34 @@ public class LazyEpub implements Book {
         initContent();
     }
 
+    private synchronized boolean cacheHas(String name) {
+        return resource.containsKey(name);
+    }
+
+    private synchronized byte[] cacheGet(String name) {
+        return resource.get(name);
+    }
+
+    private synchronized void cachePut(String name, byte[] bytes) {
+        var old = resource.put(name, bytes);
+        if (old != null) {
+            cacheBytes -= old.length;
+        }
+        cacheBytes += bytes.length;
+        // 超出预算时按访问顺序淘汰最久未使用的条目 (LinkedHashMap accessOrder=true, 迭代器从最旧开始)
+        var it = resource.entrySet().iterator();
+        while (cacheBytes > MAX_CACHE_BYTES && resource.size() > 1 && it.hasNext()) {
+            var eldest = it.next();
+            cacheBytes -= eldest.getValue().length;
+            it.remove();
+        }
+    }
+
     public String page(int page_num) {
         var filename = contents.get(page_num);
         filename = cut(filename);
-        if (resource.containsKey(filename)) {
-            var html = resource.get(filename);
+        var html = cacheGet(filename);
+        if (html != null) {
             return new String(html, StandardCharsets.UTF_8);
         }
         return "无法读取html";
@@ -116,11 +152,20 @@ public class LazyEpub implements Book {
         return contents.size();
     }
 
+    // 读取封面图片字节, 没有封面返回 null
+    public byte[] cover() throws Exception {
+        if (cover_href == null) {
+            return null;
+        }
+        return load_file(cover_href);
+    }
+
     @Override
     public byte[] GetResource(String filename) throws Exception {
         filename = cut(filename);
-        if (resource.containsKey(filename)) {
-            return resource.get(filename);
+        var bytes = cacheGet(filename);
+        if (bytes != null) {
+            return bytes;
         }
         throw new Exception("找不到对应文件" + filename);
     }
@@ -131,10 +176,10 @@ public class LazyEpub implements Book {
         return resource_type.get(filename);
     }
 
-    private void initCentralDirLocate(byte[] endBytes) {
+    private boolean initCentralDirLocate(byte[] endBytes) {
         // 检查最小长度（End of Central Directory的最小长度为22字节）
         if (endBytes == null || endBytes.length < 22) {
-            throw new IllegalArgumentException("Invalid EOCD data: length < 22 bytes");
+            return false;
         }
         // 从后往前搜索EOCD签名（处理ZIP注释可能存在的干扰）
         for (int i = endBytes.length - 22; i >= 0; i--) {
@@ -143,10 +188,10 @@ public class LazyEpub implements Book {
             if (signature == EOCD_SIGNATURE) {
                 centralDirSize = ByteBuffer.wrap(endBytes, i + 12, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
                 centralDirOffset = ByteBuffer.wrap(endBytes, i + 16, 4).order(ByteOrder.LITTLE_ENDIAN).getInt();
-                return;
+                return true;
             }
         }
-        throw new IllegalArgumentException("EOCD signature not found");
+        return false;
     }
 
     private void initCentralDirectory(byte[] centralDirData) {
@@ -201,23 +246,61 @@ public class LazyEpub implements Book {
         doc.getDocumentElement().normalize();
         //  解析元数据
         NodeList titles = doc.getElementsByTagName("dc:title");
-        title = titles.item(0).getTextContent();
+        if (titles.getLength() > 0 && titles.item(0) != null) {
+            title = titles.item(0).getTextContent();
+        }
         // 解析资源清单
         NodeList items = doc.getElementsByTagName("item");
         var id_to_path = new HashMap<String, String>();
+        String coverByProps = null; // EPUB3: properties="cover-image"
+        String coverByName = null;  // 兜底: id/href 含 cover 的图片
         for (int i = 0; i < items.getLength(); i++) {
             Element item = (Element) items.item(i);
             String id = item.getAttribute("id");
             String href = item.getAttribute("href");
             String mediaType = item.getAttribute("media-type");
-            resource_type.put(href, mediaType);
+            // 用 cut(href) 作 key, 与 GetMediaType 的查询方式保持一致, 避免路径归一化不一致导致 MIME 为 null
+            resource_type.put(cut(href), mediaType);
             id_to_path.put(id, href);
+            var props = item.getAttribute("properties");
+            var isImage = mediaType != null && mediaType.startsWith("image");
+            if (props != null && props.contains("cover-image")) {
+                coverByProps = href;
+            }
+            if (coverByName == null && isImage
+                    && (id.toLowerCase().contains("cover") || href.toLowerCase().contains("cover"))) {
+                coverByName = href;
+            }
+        }
+        // EPUB2: <meta name="cover" content="封面item的id">
+        String coverById = null;
+        NodeList metas = doc.getElementsByTagName("meta");
+        for (int i = 0; i < metas.getLength(); i++) {
+            Element m = (Element) metas.item(i);
+            if ("cover".equals(m.getAttribute("name"))) {
+                coverById = id_to_path.get(m.getAttribute("content"));
+                break;
+            }
+        }
+        if (coverByProps != null) {
+            cover_href = coverByProps;
+        } else if (coverById != null) {
+            cover_href = coverById;
+        } else {
+            cover_href = coverByName;
         }
         // 解析阅读顺序
         NodeList spineItems = doc.getElementsByTagName("itemref");
         for (int i = 0; i < spineItems.getLength(); i++) {
-            String idref = spineItems.item(i).getAttributes().getNamedItem("idref").getNodeValue();
-            contents.add(id_to_path.get(idref));
+            var idref_node = spineItems.item(i).getAttributes().getNamedItem("idref");
+            if (idref_node == null) {
+                continue;
+            }
+            var path = id_to_path.get(idref_node.getNodeValue());
+            // idref 在 manifest 里找不到时会是 null, 不要塞进 contents, 否则翻到该页会 cut(null) NPE
+            if (path != null) {
+                contents.add(path);
+            }
         }
     }
 
@@ -235,12 +318,17 @@ public class LazyEpub implements Book {
         var files = file.open(uri, slices);
         for (var idx = 0; idx < slices.size(); ++idx) {
             var slice = slices.get(idx);
-            var file = files.get(slice);
+            var data = files.get(slice);
             var key = slice_to_key.get(slice);
-            assert key != null;
+            // assert 在 Android 上默认关闭, 这里用显式判空兜底, 缺失的 range 跳过而不是 NPE
+            if (data == null || key == null) {
+                continue;
+            }
             var entry = zip_dir.get(key);
-            assert entry != null;
-            long dataOffset = entry.localHeaderOffset + parseDataOffset(file);
+            if (entry == null) {
+                continue;
+            }
+            long dataOffset = entry.localHeaderOffset + parseDataOffset(data);
             entry.SetCompressedOffset((int) dataOffset);
         }
     }
@@ -256,13 +344,14 @@ public class LazyEpub implements Book {
 
     public byte[] load_file(String filename) throws Exception {
         filename = cut(filename);
-        if (resource.containsKey(filename)) {
-            return resource.get(filename);
+        var cached = cacheGet(filename);
+        if (cached != null) {
+            return cached;
         }
         var tmp = new ArrayList<String>();
         tmp.add(filename);
         load_file_to_cache(tmp);
-        return resource.get(filename);
+        return cacheGet(filename);
     }
 
     private void load_file_to_cache(List<String> filenames) throws Exception {
@@ -270,15 +359,20 @@ public class LazyEpub implements Book {
         var slicesToFile = new HashMap<Slice, String>();
         for (var filename : filenames) {
             filename = cut(filename);
-            if (resource.containsKey(filename)) {
+            if (cacheHas(filename)) {
                 continue;
             }
             if (!zip_dir.containsKey(filename)) {
                 throw new IllegalArgumentException("no such file");
             }
             var entry = zip_dir.get(filename);
-            var slice = new Slice();
             assert entry != null;
+            // 空文件没有压缩数据, 直接缓存空字节; 否则 size=0 会生成 "offset-(offset-1)" 的非法反向 Range
+            if (entry.compressedSize == 0) {
+                cachePut(filename, new byte[0]);
+                continue;
+            }
+            var slice = new Slice();
             long dataOffset = entry.compressedOffset;
             slice.offset = Math.toIntExact(dataOffset);
             slice.size = Math.toIntExact(entry.compressedSize);
@@ -293,11 +387,15 @@ public class LazyEpub implements Book {
             var slice = kv.getKey();
             var bytes = kv.getValue();
             var filename = slicesToFile.get(slice);
-            assert filename != null;
+            if (filename == null) {
+                continue;
+            }
             var entry = zip_dir.get(filename);
-            assert entry != null;
+            if (entry == null) {
+                continue;
+            }
             if (entry.compressionMethod == 0) {
-                resource.put(filename, bytes);
+                cachePut(filename, bytes);
             } else if (entry.compressionMethod == 8) {
                 Inflater decompresser = new Inflater(true);
                 decompresser.setInput(bytes);
@@ -312,7 +410,7 @@ public class LazyEpub implements Book {
                     decompresser.end(); // 必须手动释放资源
                 }
                 var output = outputStream.toByteArray();
-                resource.put(filename, output);
+                cachePut(filename, output);
             } else {
                 throw new IllegalArgumentException("无法解压epub: " + entry.compressionMethod);
             }

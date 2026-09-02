@@ -13,6 +13,7 @@ public class ListItem {
 
     int id;
     String name;
+    String uri; // epub 的完整路径 (pwd + name), 用于加载封面/打开
     FileType type;
 
     ViewType view_type;

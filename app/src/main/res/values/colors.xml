@@ -1,8 +1,37 @@
 <resources>
+    <!-- legacy (leanback background drawable) -->
     <color name="background_gradient_start">#000000</color>
     <color name="background_gradient_end">#DDDDDD</color>
     <color name="fastlane_background">#0096a6</color>
     <color name="search_opaque">#ffaa3f</color>
     <color name="selected_background">#ffaa3f</color>
     <color name="default_background">#3d3d3d</color>
+
+    <!-- Apple Books 风格 · 米白纸感 -->
+    <color name="paper">#F5F0E6</color>
+    <color name="paper_top">#F8F3EA</color>
+    <color name="paper_bottom">#EEE6D6</color>
+    <color name="card">#FBF8F1</color>
+    <color name="card_focus">#FFFFFF</color>
+
+    <color name="ink">#2B2622</color>
+    <color name="ink_muted">#8A7E70</color>
+    <color name="hairline">#E2D9C8</color>
+
+    <color name="accent">#B4682E</color>
+    <color name="accent_dark">#8F4F20</color>
+
+    <color name="progress_track">#E3D9C7</color>
+
+    <color name="pill_scrim">#D92B2622</color>
+    <color name="on_cover">#FFFFFF</color>
+    <color name="on_cover_dim">#CCFFFFFF</color>
+
+    <!-- 生成书封的柔和色板 -->
+    <color name="cover_a">#C57B57</color>
+    <color name="cover_b">#7C8A6B</color>
+    <color name="cover_c">#6B7B8A</color>
+    <color name="cover_d">#A6789B</color>
+    <color name="cover_e">#C0983F</color>
+    <color name="cover_f">#8A6B5B</color>
 </resources>

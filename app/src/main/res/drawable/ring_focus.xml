@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 焦点描边 (Apple TV 风格高亮边框) -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android"
+    android:shape="rectangle">
+    <solid android:color="@android:color/transparent" />
+    <corners android:radius="@dimen/card_corner" />
+    <stroke
+        android:width="3dp"
+        android:color="@color/accent" />
+</shape>
