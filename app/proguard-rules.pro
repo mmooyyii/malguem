@@ -1,21 +1,25 @@
-# Add project specific ProGuard rules here.
-# You can control the set of applied configuration files using the
-# proguardFiles setting in build.gradle.
-#
-# For more details, see
-#   http://developer.android.com/guide/developing/tools/proguard.html
+# ---- Gson 反射模型: 字段名就是 json key, 混淆重命名会让持久化索引跨版本失效 ----
+# (数据源配置 to_json/from_json 走 HashMap, 不依赖字段名, 无需 keep)
+-keepclassmembers class com.github.mmooyyii.malguem.LazyEpub$IndexData { <fields>; }
+-keepclassmembers class com.github.mmooyyii.malguem.LazyEpub$IndexEntry { <fields>; }
+-keepclassmembers class com.github.mmooyyii.malguem.LazyEpub$TocItem { <fields>; }
+-keepclassmembers class com.github.mmooyyii.malguem.AppUpdater$Manifest { <fields>; }
 
-# If your project uses WebView with JS, uncomment the following
-# and specify the fully qualified class name to the JavaScript interface
-# class:
-#-keepclassmembers class fqcn.of.javascript.interface.for.webview {
-#   public *;
-#}
+# Gson 泛型 TypeToken 需要保留签名信息
+-keepattributes Signature, InnerClasses, EnclosingMethod
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# ---- jcifs-ng: 内部有配置驱动的动态加载, 整体保留最稳 (bouncycastle 走直接类引用, 不用额外 keep) ----
+-keep class jcifs.** { *; }
+-dontwarn jcifs.**
+-dontwarn org.bouncycastle.**
+-dontwarn org.slf4j.**
+-dontwarn javax.servlet.**
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# okhttp/okio 官方建议的忽略项
+-dontwarn okhttp3.**
+-dontwarn okio.**
+-dontwarn org.conscrypt.**
+-dontwarn org.openjsse.**
+
+# 崩溃堆栈保留行号, 方便远程排查
+-keepattributes SourceFile, LineNumberTable

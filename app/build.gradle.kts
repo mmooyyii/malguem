@@ -24,6 +24,8 @@ android {
         // versionCode=run_number(单调递增, 否则系统拒绝覆盖安装)
         versionCode = (prop("VERSION_CODE") ?: "1").toInt()
         versionName = prop("VERSION_NAME") ?: "dev"
+        // 界面只有中文, 裁掉 appcompat 等库自带的几十种语言资源
+        resourceConfigurations += listOf("zh")
     }
 
     signingConfigs {
@@ -40,7 +42,9 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 混淆 + 资源裁剪; Gson 反射模型与 jcifs 的 keep 规则见 proguard-rules.pro
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -73,8 +77,8 @@ android {
 }
 
 dependencies {
-    implementation(libs.androidx.leanback)
-    implementation(libs.glide)
+    // leanback 与 glide 从未被代码引用 (RecyclerView 原先是 leanback 的传递依赖), 已移除瘦身
+    implementation(libs.androidx.recyclerview)
     implementation(libs.gson)
     implementation(libs.okhttp)
     implementation(libs.androidx.appcompat)
