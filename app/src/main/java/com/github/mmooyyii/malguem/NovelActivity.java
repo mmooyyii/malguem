@@ -382,6 +382,8 @@ public class NovelActivity extends AppCompatActivity {
         epub_book_page = page;
         // 章节要从网络拉时会卡一下, 转个圈让人知道在加载 (调用方都在主线程)
         pageLoading.setVisibility(android.view.View.VISIBLE);
+        // 丢弃排队中的过时预取区间, 把带宽让给当前章 (同 ComicActivity)
+        taskQueue.clear();
         loadExecutor.execute(() -> {
             try {
                 epub_book.prepare(page, page + 1);

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 首页分区标题 (最近阅读 / 数据源), 占满整行, 不可聚焦 -->
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="12dp"
+    android:paddingEnd="12dp"
+    android:paddingTop="20dp"
+    android:paddingBottom="6dp"
+    android:textColor="@color/ink_muted"
+    android:textSize="16sp"
+    android:textStyle="bold"
+    android:focusable="false" />

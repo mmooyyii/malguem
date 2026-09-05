@@ -12,7 +12,12 @@
     <string name="retry">重试</string>
     <string name="back_home">回首页</string>
 
+    <string name="section_recent">最近阅读</string>
+    <string name="section_sources">数据源</string>
     <string name="add_source">添加数据源</string>
+    <string name="rebuild_index">重建索引</string>
+    <string name="rebuild_started">开始后台重建索引…</string>
+    <string name="edit_saved_warn">已保存 (若地址/目录变了, 旧的进度和最近阅读会找不到文件)</string>
     <string name="choose_source_type">选择数据源类型</string>
     <string name="source_scan">扫描局域网 (alist/SMB)</string>
     <string name="source_local">本地硬盘</string>

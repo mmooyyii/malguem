@@ -16,7 +16,12 @@
     <string name="back_home">Home</string>
 
     <!-- 首页 / 数据源 -->
+    <string name="section_recent">Recents</string>
+    <string name="section_sources">Sources</string>
     <string name="add_source">Add source</string>
+    <string name="rebuild_index">Rebuild index</string>
+    <string name="rebuild_started">Rebuilding index in background…</string>
+    <string name="edit_saved_warn">Saved. If the address/folder changed, old progress and recents may not resolve.</string>
     <string name="choose_source_type">Source type</string>
     <string name="source_scan">Scan LAN (alist/SMB)</string>
     <string name="source_opds" translatable="false">OPDS (Komga/Kavita/Calibre-Web)</string>

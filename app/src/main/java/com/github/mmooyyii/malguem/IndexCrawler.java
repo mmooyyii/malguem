@@ -8,12 +8,13 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-// 启动后在后台把各数据源里的书补建 epub 索引, 并回收孤儿:
+// 由首页"重建索引"按钮手动触发 (不做开机自动爬取): 把各数据源里的书补建/升级 epub 索引, 并回收孤儿:
 // 1) 数据源已删除/配置已变更 -> 该 namespace 下所有索引与封面直接删;
-// 2) 书已不在服务器上 -> 仅在该数据源完整遍历成功后, 删掉不在存活集合里的行 (部分失败不删, 防误删)
+// 2) 书已不在服务器上 -> 仅在该数据源完整遍历成功后, 删掉不在存活集合里的行 (部分失败不删, 防误删);
+// 3) 旧版本格式的索引 -> 重建 (开书时也会懒重建, 这里是主动批量刷)
 public class IndexCrawler {
 
-    private static final AtomicBoolean started = new AtomicBoolean(false);
+    private static final AtomicBoolean running = new AtomicBoolean(false);
     private static final int MAX_DIRS = 500;              // 单资源最多遍历目录数, 防失控
     private static final int MAX_NEW_INDEX = 200;         // 单次启动最多新建索引数
     private static final int MAX_CONSECUTIVE_FAILS = 3;   // 连续建索引失败次数上限, 网络不通时尽早放弃
@@ -36,13 +37,19 @@ public class IndexCrawler {
         }
     }
 
-    // 每个进程只跑一轮, 低优先级后台线程
+    // 手动触发, 同时只允许一轮在跑; 低优先级后台线程
     public static void start(Context ctx) {
-        if (!started.compareAndSet(false, true)) {
+        if (!running.compareAndSet(false, true)) {
             return;
         }
         var app = ctx.getApplicationContext();
-        var t = new Thread(() -> run(app), "epub-index-crawler");
+        var t = new Thread(() -> {
+            try {
+                run(app);
+            } finally {
+                running.set(false);
+            }
+        }, "epub-index-crawler");
         t.setDaemon(true);
         t.setPriority(Thread.MIN_PRIORITY);
         t.start();
@@ -59,6 +66,7 @@ public class IndexCrawler {
 
     private static int crawlAll(Context ctx) {
         int built = 0;
+        report(0, true); // 一开跑就亮出状态, 而不是等第一本建完
         var db = Database.getInstance(ctx).getDatabase();
         var covers = CoverLoader.get(ctx);
         var clients = new ArrayList<ResourceInterface>();
@@ -91,8 +99,8 @@ public class IndexCrawler {
                 if (budget <= 0 || fails >= MAX_CONSECUTIVE_FAILS || Thread.currentThread().isInterrupted()) {
                     break;
                 }
-                if (db.get_epub_index(ns, uri) != null) {
-                    continue;
+                if (LazyEpub.index_up_to_date(db.get_epub_index(ns, uri))) {
+                    continue; // 已有当前版本的索引; 旧版本(如 v1 无目录)会走重建
                 }
                 try {
                     var book = new LazyEpub(uri, client);

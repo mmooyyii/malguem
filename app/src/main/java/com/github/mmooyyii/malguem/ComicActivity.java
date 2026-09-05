@@ -318,6 +318,9 @@ public class ComicActivity extends AppCompatActivity {
         final int secondPage = firstPage + 1;
         // 页面图片要从网络拉时会卡一下, 转个圈让人知道在加载 (调用方都在主线程)
         pageLoading.setVisibility(View.VISIBLE);
+        // 丢弃还在排队的过时预取区间, 把带宽让给当前页 (预取和当前页共享 WebDAV 连接池,
+        // 快速翻页时排队的旧预取会让当前页请求等在后面); 正在执行的那个没法打断, 至多滞后一个
+        taskQueue.clear();
         loadExecutor.execute(() -> {
             try {
                 epub_book.prepare(firstPage, Math.min(firstPage + (two ? 2 : 1), total));

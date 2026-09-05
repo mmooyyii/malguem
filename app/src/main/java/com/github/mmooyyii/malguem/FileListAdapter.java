@@ -17,7 +17,10 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.util.ArrayList;
 import java.util.List;
 
-public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
+public class FileListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
+
+    private static final int TYPE_ITEM = 0;
+    private static final int TYPE_HEADER = 1;
 
     public interface OnItemAction {
         void onClick(ListItem item);
@@ -71,16 +74,29 @@ public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
         return items.size();
     }
 
+    @Override
+    public int getItemViewType(int position) {
+        return items.get(position).type == ListItem.FileType.Header ? TYPE_HEADER : TYPE_ITEM;
+    }
+
     @NonNull
     @Override
-    public VH onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+    public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        if (viewType == TYPE_HEADER) {
+            return new HeaderVH(LayoutInflater.from(context).inflate(R.layout.grid_item_header, parent, false));
+        }
         View v = LayoutInflater.from(context).inflate(R.layout.grid_item_file, parent, false);
         return new VH(v);
     }
 
     @Override
-    public void onBindViewHolder(@NonNull VH h, int position) {
+    public void onBindViewHolder(@NonNull RecyclerView.ViewHolder holder, int position) {
         var item = items.get(position);
+        if (holder instanceof HeaderVH) {
+            ((HeaderVH) holder).title.setText(item.name);
+            return;
+        }
+        VH h = (VH) holder;
 
         // 复用前先重置
         h.coverImage.setVisibility(View.GONE);
@@ -110,6 +126,8 @@ public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
                 h.coverIcon.setImageResource(resourceIcon(item.resource_type));
                 h.coverIcon.setVisibility(View.VISIBLE);
                 h.caption.setText(display);
+                h.sub.setText(typeName(item.resource_type));
+                h.sub.setVisibility(View.VISIBLE);
                 break;
             case AddWebDav:
                 h.cover.setBackgroundResource(R.drawable.cover_add);
@@ -120,6 +138,12 @@ public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
             case CheckUpdate:
                 h.cover.setBackgroundResource(R.drawable.cover_tile);
                 h.coverIcon.setImageResource(R.drawable.ic_update);
+                h.coverIcon.setVisibility(View.VISIBLE);
+                h.caption.setText(display);
+                break;
+            case RebuildIndex:
+                h.cover.setBackgroundResource(R.drawable.cover_tile);
+                h.coverIcon.setImageResource(R.drawable.ic_reindex);
                 h.coverIcon.setVisibility(View.VISIBLE);
                 h.caption.setText(display);
                 break;
@@ -172,8 +196,24 @@ public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
                 return R.drawable.ic_nas;
             case 3:
                 return R.drawable.ic_storage;
+            case 4:
+                return R.drawable.ic_books;
             default:
                 return R.drawable.ic_cloud;
+        }
+    }
+
+    // 数据源格子下的类型小字
+    private String typeName(int type) {
+        switch (type) {
+            case 2:
+                return "SMB";
+            case 3:
+                return context.getString(R.string.source_local);
+            case 4:
+                return "OPDS";
+            default:
+                return "WebDAV";
         }
     }
 
@@ -193,6 +233,15 @@ public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
         g = (int) (g + (255 - g) * f);
         b = (int) (b + (255 - b) * f);
         return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    static class HeaderVH extends RecyclerView.ViewHolder {
+        final TextView title;
+
+        HeaderVH(View v) {
+            super(v);
+            title = (TextView) v;
+        }
     }
 
     static class VH extends RecyclerView.ViewHolder {

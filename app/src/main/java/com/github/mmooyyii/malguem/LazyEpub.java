@@ -122,6 +122,11 @@ public class LazyEpub implements Book {
     // v2: 新增目录(toc); 旧索引在 open 时判版本不符自动删除重建
     private static final int INDEX_VERSION = 2;
 
+    // 索引是否已是当前版本 (IndexCrawler 用它决定要不要批量重建)
+    static boolean index_up_to_date(String json) {
+        return json != null && json.contains("\"v\":" + INDEX_VERSION);
+    }
+
     static class IndexEntry {
         String n; // fileName
         long o;   // localHeaderOffset

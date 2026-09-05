@@ -59,8 +59,7 @@ public class MainActivity extends AppCompatActivity {
             android.widget.TextView v = findViewById(R.id.versionText);
             v.setText(running ? versionName + "  ·  " + getString(R.string.indexing, built) : versionName);
         }));
-        // 延迟启动后台索引爬取, 避开首屏封面加载抢网络
-        new Handler(Looper.getMainLooper()).postDelayed(() -> IndexCrawler.start(this), 8000);
+        // 索引重建只由首页"重建索引"按钮触发, 不做开机自动爬取 (网盘后端带宽宝贵, 主人偏好显式操作)
     }
 
     @Override
@@ -72,10 +71,18 @@ public class MainActivity extends AppCompatActivity {
 
     public void setup_file_list() {
         RecyclerView fileListView = findViewById(R.id.fileListView);
-        fileListView.setLayoutManager(new GridLayoutManager(this, 5));
+        fileListAdapter = new FileListAdapter(this);
+        var layoutManager = new GridLayoutManager(this, 5);
+        // 分区标题占满一整行
+        layoutManager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+            @Override
+            public int getSpanSize(int position) {
+                return fileListAdapter.getItem(position).type == ListItem.FileType.Header ? 5 : 1;
+            }
+        });
+        fileListView.setLayoutManager(layoutManager);
         fileListView.setItemAnimator(null);
         fileListView.setHasFixedSize(true);
-        fileListAdapter = new FileListAdapter(this);
         fileListView.setAdapter(fileListAdapter);
         fileListAdapter.setOnItemAction(new FileListAdapter.OnItemAction() {
             @Override
@@ -99,6 +106,11 @@ public class MainActivity extends AppCompatActivity {
             }
             case CheckUpdate: {
                 updater.checkManually();
+                break;
+            }
+            case RebuildIndex: {
+                Toast.makeText(this, R.string.rebuild_started, Toast.LENGTH_SHORT).show();
+                IndexCrawler.start(this);
                 break;
             }
             case Resource: {
@@ -234,7 +246,7 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         db.update_resource(editId, u, 4, r.to_json());
                     }
-                    Toast.makeText(MainActivity.this, editId == null ? R.string.add_ok : R.string.save_ok, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, editId == null ? R.string.add_ok : R.string.edit_saved_warn, Toast.LENGTH_LONG).show();
                     init_resource_list();
                 })
                 .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
@@ -321,7 +333,7 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         db.update_resource(editId, u, 1, r.to_json());
                     }
-                    Toast.makeText(MainActivity.this, editId == null ? R.string.add_ok : R.string.save_ok, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, editId == null ? R.string.add_ok : R.string.edit_saved_warn, Toast.LENGTH_LONG).show();
                     init_resource_list();
                 })
                 .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
@@ -363,7 +375,7 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         db.update_resource(editId, "smb://" + h + "/" + s, 2, r.to_json());
                     }
-                    Toast.makeText(MainActivity.this, editId == null ? R.string.add_ok : R.string.save_ok, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, editId == null ? R.string.add_ok : R.string.edit_saved_warn, Toast.LENGTH_LONG).show();
                     init_resource_list();
                 })
                 .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
@@ -389,7 +401,7 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         db.update_resource(editId, p, 3, r.to_json());
                     }
-                    Toast.makeText(MainActivity.this, editId == null ? R.string.add_ok : R.string.save_ok, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, editId == null ? R.string.add_ok : R.string.edit_saved_warn, Toast.LENGTH_LONG).show();
                     init_resource_list();
                 })
                 .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
@@ -430,16 +442,24 @@ public class MainActivity extends AppCompatActivity {
     public void init_resource_list() {
         at_root_list = true;
         var db = Database.getInstance(this).getDatabase();
-        // 最近阅读放最前面 (一行 5 个), 点开即续读
-        var list = new ArrayList<>(db.recent_books(5));
-        list.addAll(db.resource_list());
+        var recents = db.recent_books(5);
+        var sources = db.resource_list();
+        // 分区展示: 最近阅读(有才显示) / 数据源+功能格子
+        var list = new ArrayList<ListItem>();
+        if (!recents.isEmpty()) {
+            list.add(new ListItem(0, getString(R.string.section_recent), ListItem.FileType.Header));
+            list.addAll(recents);
+        }
+        list.add(new ListItem(0, getString(R.string.section_sources), ListItem.FileType.Header));
+        list.addAll(sources);
         list.add(new ListItem(0, getString(R.string.add_source), ListItem.FileType.AddWebDav));
         list.add(new ListItem(0, getString(R.string.check_update), ListItem.FileType.CheckUpdate));
+        list.add(new ListItem(0, getString(R.string.rebuild_index), ListItem.FileType.RebuildIndex));
         fileListAdapter.setClient(null);
         fileListAdapter.setItems(list);
         findViewById(R.id.listLoading).setVisibility(View.GONE);
-        // 只剩"添加数据源/检查更新"两个功能格子时显示空书库引导
-        findViewById(R.id.emptyHint).setVisibility(list.size() == 2 ? View.VISIBLE : View.GONE);
+        findViewById(R.id.emptyHint).setVisibility(
+                recents.isEmpty() && sources.isEmpty() ? View.VISIBLE : View.GONE);
     }
 
     // 从阅读界面回来时刷新列表 (进度徽标/最近阅读). 用 onResume 而不是 ActivityResult:
