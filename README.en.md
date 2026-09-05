@@ -2,12 +2,12 @@
 
 [中文说明](readme.md)
 
-An Android TV reader for epub / pdf comics and novels — every action works with just the remote control.
+An Android TV reader for epub comics and novels — every action works with just the remote control.
 
 Four source types are supported: WebDAV / SMB / OPDS libraries (Komga, Kavita, Calibre-Web, …) / local storage.
 When adding a source you can auto-scan the LAN for alist (port 5244) and SMB (port 445) servers, so you never have to type an IP address with a remote.
 
-Epub files are parsed by streaming: only the byte ranges actually needed are fetched, so opening a book never downloads the whole file. Pdf files are downloaded once into the cache and rendered page by page (which is actually the friendlier pattern for cloud-drive backends).
+Epub files are parsed by streaming: only the byte ranges actually needed are fetched, so opening a book never downloads the whole file.
 
 Because of the streaming design the app makes **very frequent** range requests. If your WebDAV server proxies a commercial cloud drive this may trigger its rate limiting — prefer a local disk or LAN NAS as storage.
 

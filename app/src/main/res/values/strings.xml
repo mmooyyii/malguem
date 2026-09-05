@@ -60,7 +60,7 @@
     <string name="help_title">Help</string>
     <string name="help_version">Version: %1$s</string>
     <string name="help_keys">Keys:\n· MENU / long-press OK — book: switch comic/novel; source: edit/delete; recents: switch/remove\n· SETTINGS — delete the focused book\'s index and cover\n· OK while reading — contents / go to page / font size / dark mode / direction / single page</string>
-    <string name="help_cache">Cache:\nCovers %1$d, %2$s\nIndexes %3$d, %4$s\nPDF %5$d, %6$s\nUpdates %7$s</string>
+    <string name="help_cache">Cache:\nCovers %1$d, %2$s\nIndexes %3$d, %4$s\nUpdates %5$s</string>
     <string name="check_update">Check updates</string>
     <string name="clear_cache">Clear cache</string>
     <string name="cleared">Cleared %1$s</string>
@@ -85,8 +85,6 @@
     <string name="no_toc">This book has no table of contents</string>
     <string name="jump">Go</string>
     <string name="open_book_failed">Failed to open: %1$s</string>
-    <string name="pdf_downloading">Downloading PDF, %1$s MB</string>
-    <string name="pdf_downloading_pct">Downloading PDF %1$d%% (%2$s / %3$s MB)</string>
     <string name="indexing">indexing %1$d books…</string>
 
     <!-- 书封角标 -->

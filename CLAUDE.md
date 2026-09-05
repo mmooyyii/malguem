@@ -31,7 +31,7 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
 
 - 数据源: `ResourceInterface` 四个实现 (webdav/smb/local/opds), 配置序列化成 json 存 SQLite (`Database.java`), 按字节区间 `Slice` 随机读;
   OPDS 目录按标题映射进 pwd 模型, Range 读复用 WebdavResource 的 http 客户端
-- 格式: epub 走 `LazyEpub` 流式; pdf 走 `PdfBook` (整本下载到 cache/books, PdfRenderer 按页渲染成 jpg 喂 WebView, 不建索引/无封面)
+- 只支持 epub (`LazyEpub` 流式解析); pdf 支持做过又拆掉了, 别再加回来 (PdfRenderer 只认本地文件, 整本下载与产品定位不符)
 - `LazyEpub`: 流式解析 epub, 只按 HTTP Range 拉取需要的 zip 条目 (EOCD → 中央目录 → 按需取本地头+数据)
 - `WebdavResource` 处理 multipart range 响应; 注意服务器可能合并相邻 range (RFC 7233),
   分段必须按覆盖关系分配 (`assignParts`), 不能按 offset 精确配对

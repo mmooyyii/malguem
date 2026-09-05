@@ -92,10 +92,9 @@ public class WebdavResource implements ResourceInterface {
                     assert content != null;
                     content = url_decode(content);
                     var paths = content.split("/");
-                    var lower = content.toLowerCase();
                     if (content.endsWith("/")) {
                         dirs.add(new ListItem(resource_id, paths[paths.length - 1], ListItem.FileType.Dir));
-                    } else if (lower.endsWith(".epub") || lower.endsWith(".pdf")) {
+                    } else if (content.toLowerCase().endsWith(".epub")) {
                         dirs.add(new ListItem(resource_id, paths[paths.length - 1], ListItem.FileType.Epub));
                     }
                 }
@@ -120,32 +119,6 @@ public class WebdavResource implements ResourceInterface {
         var slices = new ArrayList<Slice>();
         slices.add(slice);
         return open(uri, slices).get(slice);
-    }
-
-    // 文件总大小: 用 Range 0-0 从 Content-Range 的分母拿 (dav 服务器对 HEAD 支持参差, 这个更稳)
-    @Override
-    public long size(String uri) throws Exception {
-        var request = new Request.Builder().url(url + uri)
-                .addHeader("Authorization", Credentials.basic(username, password))
-                .addHeader("Range", "bytes=0-0")
-                .build();
-        try (Response response = client.newCall(request).execute()) {
-            if (response.code() == 206) {
-                var cr = response.header("Content-Range"); // 形如 bytes 0-0/12345
-                if (cr != null) {
-                    int i = cr.lastIndexOf('/');
-                    if (i >= 0 && i + 1 < cr.length() && cr.charAt(i + 1) != '*') {
-                        return Long.parseLong(cr.substring(i + 1).trim());
-                    }
-                }
-            }
-            if (response.code() == 200 && response.body() != null) {
-                // 服务器不认 Range: 头里的 Content-Length 就是总大小, body 不消费直接关连接
-                var len = response.body().contentLength();
-                return len > 0 ? len : -1;
-            }
-        }
-        return -1;
     }
 
     public HashMap<Slice, byte[]> open(String uri, List<Slice> slices) throws Exception {

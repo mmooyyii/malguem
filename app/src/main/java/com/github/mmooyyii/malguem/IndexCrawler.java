@@ -91,9 +91,6 @@ public class IndexCrawler {
                 if (budget <= 0 || fails >= MAX_CONSECUTIVE_FAILS || Thread.currentThread().isInterrupted()) {
                     break;
                 }
-                if (uri.toLowerCase().endsWith(".pdf")) {
-                    continue; // pdf 不走流式索引
-                }
                 if (db.get_epub_index(ns, uri) != null) {
                     continue;
                 }

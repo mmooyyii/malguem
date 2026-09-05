@@ -35,10 +35,5 @@ public interface ResourceInterface {
     byte[] open(String uri, Slice slice) throws Exception;
 
     HashMap<Slice, byte[]> open(String uri, List<Slice> slice) throws Exception;
-
-    // 文件总字节数, 拿不到时返回 -1 (用于下载进度百分比, 不影响功能)
-    default long size(String uri) throws Exception {
-        return -1;
-    }
 }
 

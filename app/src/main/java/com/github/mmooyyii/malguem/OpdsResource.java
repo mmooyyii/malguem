@@ -100,11 +100,6 @@ public class OpdsResource implements ResourceInterface {
         return http().open(resolveHref(uri), slices);
     }
 
-    @Override
-    public long size(String uri) throws Exception {
-        return http().size(resolveHref(uri));
-    }
-
     private WebdavResource http() {
         if (http == null) {
             http = new WebdavResource("", username, password);
@@ -134,8 +129,8 @@ public class OpdsResource implements ResourceInterface {
     private static class Entry {
         String title;
         String navHref;  // 子目录 feed
-        String bookHref; // epub/pdf 下载链接
-        String ext;      // ".epub" / ".pdf"
+        String bookHref; // epub 下载链接
+        String ext;      // ".epub"
     }
 
     // 拉一层 feed, 跟随 rel=next 分页; 标题内的 "/" 会破坏 pwd 模型, 换成 "∕"; 同层重名加序号去重
@@ -222,13 +217,10 @@ public class OpdsResource implements ResourceInterface {
                     continue;
                 }
                 if (rel.startsWith("http://opds-spec.org/acquisition")) {
-                    // 只认 epub 与 pdf, 其余格式(cbz/mobi 等)跳过
+                    // 只认 epub, 其余格式(pdf/cbz/mobi 等)跳过
                     if (type.contains("epub")) {
                         entry.bookHref = resolve(baseUrl, href);
                         entry.ext = ".epub";
-                    } else if (entry.bookHref == null && type.contains("pdf")) {
-                        entry.bookHref = resolve(baseUrl, href);
-                        entry.ext = ".pdf";
                     }
                 } else if (entry.navHref == null
                         && (type.contains("profile=opds-catalog") || "subsection".equals(rel))) {

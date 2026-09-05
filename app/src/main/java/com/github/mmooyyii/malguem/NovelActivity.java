@@ -122,9 +122,6 @@ public class NovelActivity extends AppCompatActivity {
         loadExecutor.shutdownNow();
         // 规范销毁 WebView 以释放其 native 内存 (取代原来独立进程+killProcess 的做法)
         destroyWebView(novelView);
-        if (epub_book != null) {
-            epub_book.close(); // 释放 PdfRenderer 等底层资源
-        }
         super.onDestroy();
     }
 
@@ -413,23 +410,8 @@ public class NovelActivity extends AppCompatActivity {
         private final DecimalFormat fmt = new DecimalFormat("0.000"); // 保留进度格式化
         private final TextView progressMessageTextView;
 
-        private final android.widget.ProgressBar progressPercent;
-
         public OpenEpub(android.view.View dialogView) {
             this.progressMessageTextView = dialogView.findViewById(R.id.message);
-            this.progressPercent = dialogView.findViewById(R.id.progress_percent);
-        }
-
-        // 下载进度: 知道总大小时给百分比进度条, 不知道时退化成已下载 MB 数
-        private void showDownloadProgress(long done, long total) {
-            if (total > 0) {
-                progressPercent.setVisibility(android.view.View.VISIBLE);
-                progressPercent.setProgress((int) Math.min(1000, done * 1000 / total));
-                progressMessageTextView.setText(getString(R.string.pdf_downloading_pct,
-                        (int) (done * 100 / total), fmt.format(done / 1048576.0), fmt.format(total / 1048576.0)));
-            } else {
-                progressMessageTextView.setText(getString(R.string.pdf_downloading, fmt.format(done / 1048576.0)));
-            }
         }
 
         public void executeTask() {
@@ -445,14 +427,8 @@ public class NovelActivity extends AppCompatActivity {
                     var db = Database.getInstance(NovelActivity.this).getDatabase();
                     var info = db.get_epub_info(resource_id, book_uri);
                     epub_book_page = info.current_page;
-                    if (book_uri != null && book_uri.toLowerCase().endsWith(".pdf")) {
-                        // pdf 整本下载到缓存后按页渲染 (PdfRenderer 只认本地文件)
-                        epub_book = PdfBook.open(client.to_json(), book_uri, client, getCacheDir(),
-                                (done, total) -> handler.post(() -> showDownloadProgress(done, total)));
-                    } else {
-                        // 有持久化索引时 0 次网络往返完成开书
-                        epub_book = LazyEpub.open(client.to_json(), book_uri, client, db);
-                    }
+                    // 有持久化索引时 0 次网络往返完成开书
+                    epub_book = LazyEpub.open(client.to_json(), book_uri, client, db);
                     handler.post(() -> {
                         if (isDestroyed()) {
                             return; // 活动已销毁时窗口已被系统回收, 再 dismiss 会抛 View not attached

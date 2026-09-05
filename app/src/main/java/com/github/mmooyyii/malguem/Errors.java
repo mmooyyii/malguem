@@ -36,7 +36,7 @@ public class Errors {
             if (t instanceof FileNotFoundException) {
                 return ctx.getString(R.string.err_not_found);
             }
-            // LazyEpub/PdfRenderer 的解析失败: zip 结构/opf/pdf 打不开
+            // LazyEpub 的解析失败: zip 结构/opf 打不开
             if (t instanceof IllegalArgumentException || t instanceof SecurityException) {
                 return ctx.getString(R.string.err_bad_file);
             }

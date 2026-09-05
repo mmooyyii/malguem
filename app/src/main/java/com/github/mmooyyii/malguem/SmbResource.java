@@ -73,7 +73,7 @@ public class SmbResource implements ResourceInterface {
                     name = name.substring(0, name.length() - 1);
                 }
                 dirs.add(new ListItem(resource_id, name, ListItem.FileType.Dir));
-            } else if (name.toLowerCase().endsWith(".epub") || name.toLowerCase().endsWith(".pdf")) {
+            } else if (name.toLowerCase().endsWith(".epub")) {
                 dirs.add(new ListItem(resource_id, name, ListItem.FileType.Epub));
             }
         }
@@ -90,11 +90,6 @@ public class SmbResource implements ResourceInterface {
         map.put("password", password);
         map.put("domain", domain);
         return new Gson().toJson(map);
-    }
-
-    @Override
-    public long size(String uri) throws Exception {
-        return new SmbFile(baseUrl + uri, ctx()).length();
     }
 
     @Override

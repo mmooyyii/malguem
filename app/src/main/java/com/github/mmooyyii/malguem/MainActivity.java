@@ -566,14 +566,12 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    // 帮助: 版本 + 按键说明 + 缓存概况 (covers 封面缩略图, updates OTA 包, books 整本下载的 pdf, SQLite 里的 epub 索引) + 检查更新
+    // 帮助: 版本 + 按键说明 + 缓存概况 (covers 封面缩略图, updates OTA 包, SQLite 里的 epub 索引) + 检查更新
     private void showHelpDialog() {
         File covers = new File(getCacheDir(), "covers");
         File updates = new File(getCacheDir(), "updates");
-        File books = new File(getCacheDir(), "books");
         long coverBytes = dir_size(covers);
         long updateBytes = dir_size(updates);
-        long bookBytes = dir_size(books);
         var db = Database.getInstance(this).getDatabase();
         long[] index = db.epub_index_stats();
         String version;
@@ -587,7 +585,6 @@ public class MainActivity extends AppCompatActivity {
                 + "\n\n" + getString(R.string.help_cache,
                 file_count(covers), format_size(coverBytes),
                 index[0], format_size(index[1]),
-                file_count(books), format_size(bookBytes),
                 format_size(updateBytes));
         new AlertDialog.Builder(this)
                 .setTitle(R.string.help_title)
@@ -597,10 +594,9 @@ public class MainActivity extends AppCompatActivity {
                     CoverLoader.get(this).clearMemory();
                     delete_children(covers);
                     delete_children(updates);
-                    delete_children(books);
                     db.clear_epub_index();
                     Toast.makeText(this, getString(R.string.cleared,
-                            format_size(coverBytes + updateBytes + bookBytes + index[1])), Toast.LENGTH_SHORT).show();
+                            format_size(coverBytes + updateBytes + index[1])), Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton(R.string.close, (dialog, which) -> dialog.dismiss())
                 .show();

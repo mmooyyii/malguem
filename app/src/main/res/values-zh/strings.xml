@@ -51,7 +51,7 @@
     <string name="help_title">帮助</string>
     <string name="help_version">版本: %1$s</string>
     <string name="help_keys">按键说明:\n· 菜单键 / 长按OK — 书: 切换漫画/小说; 数据源: 编辑/删除; 最近阅读: 切换/移除\n· 设置键 — 删除聚焦那本书的索引与封面\n· 阅读中按OK — 目录 / 跳页 / 字号 / 夜间 / 阅读方向 / 单页</string>
-    <string name="help_cache">缓存:\n封面 %1$d 张, %2$s\n索引 %3$d 本, %4$s\nPDF %5$d 本, %6$s\n更新包 %7$s</string>
+    <string name="help_cache">缓存:\n封面 %1$d 张, %2$s\n索引 %3$d 本, %4$s\n更新包 %5$s</string>
     <string name="check_update">检查更新</string>
     <string name="clear_cache">清空缓存</string>
     <string name="cleared">已清理 %1$s</string>
@@ -75,8 +75,6 @@
     <string name="no_toc">本书没有目录</string>
     <string name="jump">跳转</string>
     <string name="open_book_failed">打开失败: %1$s</string>
-    <string name="pdf_downloading">正在下载 PDF %1$s MB</string>
-    <string name="pdf_downloading_pct">正在下载 PDF %1$d%% (%2$s / %3$s MB)</string>
     <string name="indexing">后台建索引 %1$d 本…</string>
 
     <string name="novel_label">小说</string>

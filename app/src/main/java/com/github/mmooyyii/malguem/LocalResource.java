@@ -33,7 +33,7 @@ public class LocalResource implements ResourceInterface {
         for (var f : children) {
             if (f.isDirectory()) {
                 out.add(new ListItem(resource_id, f.getName(), ListItem.FileType.Dir));
-            } else if (f.getName().toLowerCase().endsWith(".epub") || f.getName().toLowerCase().endsWith(".pdf")) {
+            } else if (f.getName().toLowerCase().endsWith(".epub")) {
                 out.add(new ListItem(resource_id, f.getName(), ListItem.FileType.Epub));
             }
         }
@@ -46,13 +46,6 @@ public class LocalResource implements ResourceInterface {
         map.put("type", "local");
         map.put("root", root);
         return new Gson().toJson(map);
-    }
-
-    @Override
-    public long size(String uri) {
-        var f = new File(root, uri.startsWith("/") ? uri.substring(1) : uri);
-        var len = f.length();
-        return len > 0 ? len : -1;
     }
 
     @Override
