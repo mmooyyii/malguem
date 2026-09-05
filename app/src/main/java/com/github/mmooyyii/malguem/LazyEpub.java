@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.Inflater;
@@ -129,32 +130,45 @@ public class LazyEpub implements Book {
             load_file_to_cache(files);
         } catch (Exception ignore) {
         }
-        files.clear();
+        // 一趟选出所有引用了资源的元素, 按元素自带的属性取引用; LinkedHashSet 去重, 避免 Range 里出现重复区间
+        var refs = new LinkedHashSet<String>();
         for (var page_num = from; page_num < to; ++page_num) {
             try {
                 var filename = contents.get(page_num);
                 var html = new String(load_file(filename), StandardCharsets.UTF_8);
                 var doc = Jsoup.parse(html);
-                // 这里怎么才能一次性写好呢?
-                for (var script : doc.select("script[src]")) {
-                    files.add(script.attr("src"));
-                }
-                for (var link : doc.select("link[href]")) {
-                    files.add(link.attr("href"));
-                }
-                for (var img : doc.select("img[src]")) {
-                    files.add(img.attr("src"));
-                }
-                for (var image : doc.select("image[xlink:href]")) {
-                    files.add(image.attr("xlink:href"));
+                for (var el : doc.select("script[src], img[src], link[href], image[xlink:href]")) {
+                    var ref = el.hasAttr("src") ? el.attr("src")
+                            : el.hasAttr("href") ? el.attr("href")
+                            : el.attr("xlink:href");
+                    ref = innerRef(ref);
+                    if (ref != null) {
+                        refs.add(ref);
+                    }
                 }
             } catch (Exception ignore) {
             }
         }
         try {
-            load_file_to_cache(files);
+            load_file_to_cache(new ArrayList<>(refs));
         } catch (Exception ignore) {
         }
+    }
+
+    // 归一化页面里的资源引用: 外链/data URI 不在包内返回 null, 并去掉 #锚点 与 ?查询
+    private static String innerRef(String ref) {
+        if (ref == null || ref.contains("://") || ref.startsWith("data:")) {
+            return null;
+        }
+        int i = ref.indexOf('#');
+        if (i >= 0) {
+            ref = ref.substring(0, i);
+        }
+        i = ref.indexOf('?');
+        if (i >= 0) {
+            ref = ref.substring(0, i);
+        }
+        return ref.isEmpty() ? null : ref;
     }
 
     public int total_pages() {
@@ -176,13 +190,33 @@ public class LazyEpub implements Book {
         if (bytes != null) {
             return bytes;
         }
-        throw new Exception("找不到对应文件" + filename);
+        // 缓存未命中时回源加载: CSS 内部 url() 引用的字体/图片等不会被 prepare 的 Jsoup 扫描到,
+        // 而 shouldInterceptRequest 本身运行在 WebView 后台线程, 允许网络 IO
+        return load_file(filename);
     }
 
     @Override
     public String GetMediaType(String filename) {
         filename = cut(filename);
-        return resource_type.get(filename);
+        var type = resource_type.get(filename);
+        if (type != null) {
+            return type;
+        }
+        // manifest 没覆盖到(或 href 编码/路径不一致)时按扩展名兜底, CSS/字体对 MIME 敏感
+        var lower = filename.toLowerCase();
+        if (lower.endsWith(".css")) return "text/css";
+        if (lower.endsWith(".js")) return "text/javascript";
+        if (lower.endsWith(".jpg") || lower.endsWith(".jpeg")) return "image/jpeg";
+        if (lower.endsWith(".png")) return "image/png";
+        if (lower.endsWith(".gif")) return "image/gif";
+        if (lower.endsWith(".webp")) return "image/webp";
+        if (lower.endsWith(".svg")) return "image/svg+xml";
+        if (lower.endsWith(".xhtml") || lower.endsWith(".html")) return "application/xhtml+xml";
+        if (lower.endsWith(".ttf")) return "font/ttf";
+        if (lower.endsWith(".otf")) return "font/otf";
+        if (lower.endsWith(".woff")) return "font/woff";
+        if (lower.endsWith(".woff2")) return "font/woff2";
+        return null;
     }
 
     private boolean initCentralDirLocate(byte[] endBytes) {
@@ -328,6 +362,10 @@ public class LazyEpub implements Book {
         if (cached != null) {
             return cached;
         }
+        // 单文件路径保留"找不到就报错"的语义 (批量预取里则是跳过)
+        if (!zip_dir.containsKey(filename)) {
+            throw new IllegalArgumentException("no such file: " + filename);
+        }
         var tmp = new ArrayList<String>();
         tmp.add(filename);
         load_file_to_cache(tmp);
@@ -342,7 +380,8 @@ public class LazyEpub implements Book {
                 continue;
             }
             if (!zip_dir.containsKey(filename)) {
-                throw new IllegalArgumentException("no such file");
+                // 引用的文件不在包内(坏引用/未收录), 跳过即可, 不能让一个坏引用拖垮整批预取
+                continue;
             }
             var entry = zip_dir.get(filename);
             assert entry != null;

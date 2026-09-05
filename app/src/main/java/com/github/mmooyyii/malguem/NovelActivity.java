@@ -12,6 +12,7 @@ import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
@@ -19,7 +20,6 @@ import androidx.appcompat.app.AppCompatActivity;
 import java.io.ByteArrayInputStream;
 import java.text.DecimalFormat;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -82,10 +82,13 @@ public class NovelActivity extends AppCompatActivity {
     }
 
     @Override
-    public void onBackPressed() {
-        var db = Database.getInstance(this).getDatabase();
-        db.save_history(resource_id, book_uri, epub_book.total_pages(), epub_book_page, novelView.getScrollY());
-        super.onBackPressed();
+    protected void onPause() {
+        // 在 onPause 保存进度, 覆盖 HOME 键/进程回收等非返回键的退出路径; 开书失败时 epub_book 为 null 则跳过
+        if (epub_book != null) {
+            var db = Database.getInstance(this).getDatabase();
+            db.save_history(resource_id, book_uri, epub_book.total_pages(), epub_book_page, novelView.getScrollY());
+        }
+        super.onPause();
     }
 
     @Override
@@ -151,6 +154,10 @@ public class NovelActivity extends AppCompatActivity {
 
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        if (epub_book == null) {
+            // 书还没打开(或打开失败)时不响应翻页键, 避免 NPE
+            return super.dispatchKeyEvent(event);
+        }
         int keyCode = event.getKeyCode();
         int action = event.getAction();
         boolean page_changed = false;
@@ -195,7 +202,6 @@ public class NovelActivity extends AppCompatActivity {
     }
 
     private class OpenEpub {
-        private final Executor executor = Executors.newSingleThreadExecutor();
         private final Handler handler = new Handler(Looper.getMainLooper());
         private final DecimalFormat fmt = new DecimalFormat("0.000"); // 保留进度格式化
         private final TextView progressMessageTextView;
@@ -211,15 +217,32 @@ public class NovelActivity extends AppCompatActivity {
                         progressMessageTextView.setText(getString(R.string.opening_epub));
                     }
             );
-            executor.execute(() -> {
-                var db = Database.getInstance(NovelActivity.this).getDatabase();
-                var info = db.get_epub_info(resource_id, book_uri);
-                epub_book_page = info.current_page;
-                epub_book = OpenStreamEpubBackground();
-                handler.post(() -> {
-                    progressDialog.dismiss();
-                    notifyPageChanged(info.page_offset);
-                });
+            // 复用 loadExecutor, 不再每次开书新建一个从不 shutdown 的线程
+            loadExecutor.execute(() -> {
+                try {
+                    var db = Database.getInstance(NovelActivity.this).getDatabase();
+                    var info = db.get_epub_info(resource_id, book_uri);
+                    epub_book_page = info.current_page;
+                    epub_book = new LazyEpub(book_uri, client);
+                    handler.post(() -> {
+                        if (isDestroyed()) {
+                            return; // 活动已销毁时窗口已被系统回收, 再 dismiss 会抛 View not attached
+                        }
+                        progressDialog.dismiss();
+                        notifyPageChanged(info.page_offset);
+                    });
+                } catch (Exception e) {
+                    // 打开失败必须关掉不可取消的进度框并退出, 否则界面永久卡在转圈上
+                    // (onDestroy 会 shutdownNow 中断打开过程, 也会走到这里, 所以同样要判 isDestroyed)
+                    handler.post(() -> {
+                        if (isDestroyed()) {
+                            return;
+                        }
+                        progressDialog.dismiss();
+                        Toast.makeText(NovelActivity.this, "打开 epub 失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        finish();
+                    });
+                }
             });
         }
 
@@ -230,14 +253,6 @@ public class NovelActivity extends AppCompatActivity {
                 var b = fmt.format(total / 1024.0 / 1024.0);
                 progressMessageTextView.setText(getString(R.string.load_percent, a, b));
             });
-        }
-
-        private Book OpenStreamEpubBackground() {
-            try {
-                return new LazyEpub(book_uri, client);
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
         }
     }
 

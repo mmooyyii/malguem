@@ -25,7 +25,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executor;
+import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 
@@ -39,6 +39,8 @@ public class MainActivity extends AppCompatActivity {
     boolean at_root_list = false;
     long kill_app_countdown = 0;
     private ActivityResultLauncher<Intent> launcher;
+    // 目录拉取共用一个后台线程, 避免每次 FetchFileListTask 新建一个从不 shutdown 的 executor 泄漏线程
+    private final ExecutorService fetchExecutor = Executors.newSingleThreadExecutor();
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -269,6 +271,12 @@ public class MainActivity extends AppCompatActivity {
     }
 
     @Override
+    protected void onDestroy() {
+        fetchExecutor.shutdownNow();
+        super.onDestroy();
+    }
+
+    @Override
     public void onBackPressed() {
         if (at_root_list) {
             var now = Instant.now().toEpochMilli();
@@ -289,11 +297,10 @@ public class MainActivity extends AppCompatActivity {
 
 
     private class FetchFileListTask {
-        private final Executor executor = Executors.newSingleThreadExecutor();
         private final Handler handler = new Handler(Looper.getMainLooper());
 
         public void executeTask() {
-            executor.execute(() -> {
+            fetchExecutor.execute(() -> {
                 at_root_list = false;
                 List<ListItem> fileList;
                 try {

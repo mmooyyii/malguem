@@ -6,10 +6,12 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.StringJoiner;
 import java.util.regex.Matcher;
@@ -133,11 +135,10 @@ public class WebdavResource implements ResourceInterface {
                 var contentRange = response.header("Content-Range");
                 var returned = contentRange == null ? null : extractRange(contentRange);
                 if (returned != null) {
-                    for (var slice : slices) {
-                        if (slice.offset.equals(returned.offset)) {
-                            output.put(slice, bytes);
-                        }
-                    }
+                    // 服务器把多个 range 合并成一个更大的单段时, 按覆盖关系切回各请求区间
+                    var parts = new ArrayList<Map.Entry<Slice, byte[]>>();
+                    parts.add(new AbstractMap.SimpleEntry<>(returned, bytes));
+                    return assignParts(parts, slices);
                 }
                 return output;
             }
@@ -196,7 +197,8 @@ public class WebdavResource implements ResourceInterface {
                 return false;
             }
             for (int i = 0; i < ContentRanges.length; i++) {
-                if (buffer[i] != ContentRanges[i]) {
+                // HTTP 头名大小写不敏感 (RFC 7230), 有的服务器写 content-range
+                if (Character.toLowerCase((char) buffer[i]) != Character.toLowerCase((char) ContentRanges[i])) {
                     return false;
                 }
             }
@@ -209,13 +211,11 @@ public class WebdavResource implements ResourceInterface {
     }
 
     private HashMap<Slice, byte[]> SplitMultipleRanges(byte[] bytes, List<Slice> requested) {
-        // 按 offset 建索引, 把解析出的分段映射回调用方持有的 Slice 实例,
-        // 否则响应里 size=end-start+1 的新 Slice 与请求 Slice 的 equals/hashCode 不一致, 查不到结果
-        var byOffset = new HashMap<Integer, Slice>();
-        for (var s : requested) {
-            byOffset.put(s.offset, s);
-        }
-        var output = new HashMap<Slice, byte[]>();
+        // 先解析出每个分段的实际区间与数据. 注意分段与请求不一定一一对应:
+        // RFC 7233 允许服务器把相邻/间距很小的 range 合并成一个更大的分段返回,
+        // 而 zip 里相邻条目的数据区间只隔一个几十字节的本地文件头, 极易被合并,
+        // 所以不能按 offset 精确配对, 要按覆盖关系分配再裁切
+        var parts = new ArrayList<Map.Entry<Slice, byte[]>>();
         var buffer = new Buffer();
         Slice slice = null;
         var idx = 0;
@@ -226,13 +226,34 @@ public class WebdavResource implements ResourceInterface {
                 if (buffer.isContentRanges()) {
                     slice = extractRange(buffer.to_string());
                 } else if (buffer.StartWithRN() && slice != null) {
-                    var data = Arrays.copyOfRange(bytes, idx, idx + slice.size);
-                    var key = byOffset.get(slice.offset);
-                    output.put(key != null ? key : slice, data);
+                    // 响应被截断时按实际长度截取, 覆盖判断会筛掉不完整的分段, 避免缓存补零的坏数据
+                    var end = Math.min(idx + slice.size, bytes.length);
+                    parts.add(new AbstractMap.SimpleEntry<>(slice, Arrays.copyOfRange(bytes, idx, end)));
                     idx += slice.size;
                     slice = null;
                 }
                 buffer.clear();
+            }
+        }
+        return assignParts(parts, requested);
+    }
+
+    // 把服务器返回的分段按覆盖关系分配给请求的 slice: 分段 [pStart, pStart+len) 覆盖请求 [rStart, rEnd) 时裁出精确区间
+    private static HashMap<Slice, byte[]> assignParts(List<Map.Entry<Slice, byte[]>> parts, List<Slice> requested) {
+        var output = new HashMap<Slice, byte[]>();
+        for (var req : requested) {
+            if (req.offset == null || req.offset < 0 || req.size == null) {
+                continue; // 后缀 range 不会以 multipart 返回, 不在此处理
+            }
+            long rStart = req.offset;
+            long rEnd = rStart + req.size;
+            for (var part : parts) {
+                var data = part.getValue();
+                long pStart = part.getKey().offset;
+                if (rStart >= pStart && rEnd <= pStart + data.length) {
+                    output.put(req, Arrays.copyOfRange(data, (int) (rStart - pStart), (int) (rEnd - pStart)));
+                    break;
+                }
             }
         }
         return output;
