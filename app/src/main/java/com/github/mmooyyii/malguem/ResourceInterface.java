@@ -1,8 +1,7 @@
 package com.github.mmooyyii.malguem;
 
 
-import com.google.gson.Gson;
-import com.google.gson.reflect.TypeToken;
+import com.google.gson.JsonParser;
 
 import java.util.HashMap;
 import java.util.List;
@@ -14,10 +13,13 @@ public interface ResourceInterface {
     String to_json();
 
     static ResourceInterface from_json(String json) {
-        Gson gson = new Gson();
-        var type = new TypeToken<HashMap<String, String>>() {
-        }.getType();
-        HashMap<String, String> map = gson.fromJson(json, type);
+        // 不用 TypeToken: 它依赖匿名子类的泛型签名, R8 full mode 会剥掉签名导致 fromJson
+        // 退化返回 LinkedTreeMap, 赋值处 ClassCastException (v1.7.0 进/编辑数据源闪退的根因)
+        var obj = JsonParser.parseString(json).getAsJsonObject();
+        var map = new HashMap<String, String>();
+        for (var e : obj.entrySet()) {
+            map.put(e.getKey(), e.getValue().isJsonNull() ? null : e.getValue().getAsString());
+        }
         String t = map.get("type");
         if ("smb".equals(t)) {
             return SmbResource.fromMap(map);

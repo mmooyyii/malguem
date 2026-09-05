@@ -447,6 +447,8 @@ public class MainActivity extends AppCompatActivity {
             skipFirstResume = false; // onCreate 里 init_resource_list 已经初始化过
             return;
         }
+        // HOME 挂后台几天再回来的场景也要能发现新版本 (内部有 6 小时节流)
+        updater.checkOnLaunch();
         if (at_root_list) {
             init_resource_list();
         } else {
