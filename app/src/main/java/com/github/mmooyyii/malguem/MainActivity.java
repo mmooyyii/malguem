@@ -48,6 +48,7 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         setup_file_list();
         pwd = new ArrayList<>();
+        show_version();
         updater = new AppUpdater(this);
         updater.checkOnLaunch();
         // 延迟启动后台索引爬取, 避开首屏封面加载抢网络
@@ -356,6 +357,16 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+
+    // 主界面右上角小字显示版本号 (CI 构建时 versionName = tag 名, 本地是 dev)
+    private void show_version() {
+        android.widget.TextView v = findViewById(R.id.versionText);
+        try {
+            v.setText(getPackageManager().getPackageInfo(getPackageName(), 0).versionName);
+        } catch (Exception e) {
+            v.setText("");
+        }
+    }
 
     public void init_resource_list() {
         at_root_list = true;

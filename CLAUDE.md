@@ -33,7 +33,9 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
 - `LazyEpub`: 流式解析 epub, 只按 HTTP Range 拉取需要的 zip 条目 (EOCD → 中央目录 → 按需取本地头+数据)
 - `WebdavResource` 处理 multipart range 响应; 注意服务器可能合并相邻 range (RFC 7233),
   分段必须按覆盖关系分配 (`assignParts`), 不能按 offset 精确配对
-- 阅读界面: `NovelActivity` (WebView 翻章) / `ComicActivity` (左右双栏), 文件列表按菜单键切换两种模式
+- 阅读界面: `NovelActivity` (WebView 翻章) / `ComicActivity` (左右双栏), 文件列表菜单键/长按OK切换两种模式
 - 阅读中 OK/菜单键呼出阅读菜单: 目录跳转(`LazyEpub` 解析 ncx/nav, 存进 epub_index, 索引版本 v2) /
-  SeekBar 跳页 / 小说字号(textZoom, SharedPreferences 全局) / 漫画阅读方向(rtl, epub 表按书存)
+  SeekBar 跳页 / 小说字号+夜间(SharedPreferences 全局) / 漫画阅读方向rtl+单页(epub 表按书存) / 互切模式(顶替 Activity)
+- 小说章内进度 page_offset 存万分比而非像素 (字号/夜间重排后按比例恢复); MainActivity 用 onResume 刷新列表
 - 首页最前排是"最近阅读" (`epub.last_read` 倒序, `RecentEpub` 类型条目自带 namespace, 点开直接续读)
+- release 开了 R8: Gson 反射模型(epub 索引/更新清单)和 jcifs 的 keep 规则在 proguard-rules.pro, 新增反射模型记得补 keep
