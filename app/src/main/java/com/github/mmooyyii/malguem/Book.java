@@ -28,4 +28,8 @@ public interface Book {
     default List<TocEntry> toc() {
         return Collections.emptyList();
     }
+
+    // 释放底层资源 (PdfRenderer 等); 流式 epub 没有要释放的东西
+    default void close() {
+    }
 }

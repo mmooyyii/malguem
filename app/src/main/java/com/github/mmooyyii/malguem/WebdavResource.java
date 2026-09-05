@@ -89,9 +89,10 @@ public class WebdavResource implements ResourceInterface {
                     assert content != null;
                     content = url_decode(content);
                     var paths = content.split("/");
+                    var lower = content.toLowerCase();
                     if (content.endsWith("/")) {
                         dirs.add(new ListItem(resource_id, paths[paths.length - 1], ListItem.FileType.Dir));
-                    } else if (content.endsWith(".epub")) {
+                    } else if (lower.endsWith(".epub") || lower.endsWith(".pdf")) {
                         dirs.add(new ListItem(resource_id, paths[paths.length - 1], ListItem.FileType.Epub));
                     }
                 }

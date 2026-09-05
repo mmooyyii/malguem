@@ -73,7 +73,7 @@ public class SmbResource implements ResourceInterface {
                     name = name.substring(0, name.length() - 1);
                 }
                 dirs.add(new ListItem(resource_id, name, ListItem.FileType.Dir));
-            } else if (name.toLowerCase().endsWith(".epub")) {
+            } else if (name.toLowerCase().endsWith(".epub") || name.toLowerCase().endsWith(".pdf")) {
                 dirs.add(new ListItem(resource_id, name, ListItem.FileType.Epub));
             }
         }

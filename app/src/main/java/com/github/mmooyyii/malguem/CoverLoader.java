@@ -51,6 +51,12 @@ public class CoverLoader {
 
     // namespace 用于区分不同服务器/账号 (同名路径不冲突); target 加载成功显示, 失败隐藏(露出兜底封面)
     public void load(String namespace, String uri, ResourceInterface client, ImageView target) {
+        // pdf 没有流式取封面的能力 (要整本下载), 直接用兜底书封
+        if (uri != null && uri.toLowerCase().endsWith(".pdf")) {
+            target.setTag(R.id.cover_key_tag, null);
+            target.setVisibility(View.GONE);
+            return;
+        }
         final String key = keyOf(namespace, uri);
         target.setTag(R.id.cover_key_tag, key);
         Bitmap cached = memory.get(key);

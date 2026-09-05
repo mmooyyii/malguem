@@ -174,6 +174,9 @@ public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
         if (name.toLowerCase().endsWith(".epub")) {
             return name.substring(0, name.length() - 5);
         }
+        if (name.toLowerCase().endsWith(".pdf")) {
+            return name.substring(0, name.length() - 4);
+        }
         return name;
     }
 

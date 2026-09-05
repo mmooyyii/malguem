@@ -120,6 +120,9 @@ public class NovelActivity extends AppCompatActivity {
         loadExecutor.shutdownNow();
         // 规范销毁 WebView 以释放其 native 内存 (取代原来独立进程+killProcess 的做法)
         destroyWebView(novelView);
+        if (epub_book != null) {
+            epub_book.close(); // 释放 PdfRenderer 等底层资源
+        }
         super.onDestroy();
     }
 
@@ -416,8 +419,15 @@ public class NovelActivity extends AppCompatActivity {
                     var db = Database.getInstance(NovelActivity.this).getDatabase();
                     var info = db.get_epub_info(resource_id, book_uri);
                     epub_book_page = info.current_page;
-                    // 有持久化索引时 0 次网络往返完成开书
-                    epub_book = LazyEpub.open(client.to_json(), book_uri, client, db);
+                    if (book_uri != null && book_uri.toLowerCase().endsWith(".pdf")) {
+                        // pdf 整本下载到缓存后按页渲染 (PdfRenderer 只认本地文件)
+                        epub_book = PdfBook.open(client.to_json(), book_uri, client, getCacheDir(),
+                                done -> handler.post(() -> progressMessageTextView.setText(
+                                        "正在下载 PDF " + fmt.format(done / 1048576.0) + " MB")));
+                    } else {
+                        // 有持久化索引时 0 次网络往返完成开书
+                        epub_book = LazyEpub.open(client.to_json(), book_uri, client, db);
+                    }
                     handler.post(() -> {
                         if (isDestroyed()) {
                             return; // 活动已销毁时窗口已被系统回收, 再 dismiss 会抛 View not attached
