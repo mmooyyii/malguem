@@ -39,6 +39,7 @@ public class MainActivity extends AppCompatActivity {
     boolean at_root_list = false;
     long kill_app_countdown = 0;
     private ActivityResultLauncher<Intent> launcher;
+    private AppUpdater updater;
     // 目录拉取共用一个后台线程, 避免每次 FetchFileListTask 新建一个从不 shutdown 的 executor 泄漏线程
     private final ExecutorService fetchExecutor = Executors.newSingleThreadExecutor();
 
@@ -53,6 +54,8 @@ public class MainActivity extends AppCompatActivity {
                 result -> {
                     new FetchFileListTask().executeTask();
                 });
+        updater = new AppUpdater(this);
+        updater.checkOnLaunch();
     }
 
     public void setup_file_list() {

@@ -20,8 +20,10 @@ android {
         applicationId = "com.github.mmooyyii.malguem"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        // CI 打 tag 时注入: versionName=tag名(应用内更新用它和 GitHub Release 的 tag_name 比较),
+        // versionCode=run_number(单调递增, 否则系统拒绝覆盖安装)
+        versionCode = (prop("VERSION_CODE") ?: "1").toInt()
+        versionName = prop("VERSION_NAME") ?: "dev"
     }
 
     signingConfigs {

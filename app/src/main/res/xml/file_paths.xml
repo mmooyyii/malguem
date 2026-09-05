@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- OTA 更新下载的 apk 通过 FileProvider 暴露给系统安装器 -->
+    <cache-path
+        name="updates"
+        path="updates/" />
+</paths>

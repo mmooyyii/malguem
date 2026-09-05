@@ -36,22 +36,26 @@ jobs:
           RELEASE_STORE_PASSWORD: ${{ secrets.RELEASE_STORE_PASSWORD }}
           RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
           RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+          # 应用内 OTA 更新依赖: versionName=tag 名, versionCode 单调递增
+          VERSION_NAME: ${{ github.ref_name }}
+          VERSION_CODE: ${{ github.run_number }}
         run: ./gradlew :app:assembleRelease
 
-      - name: Rename APK
+      - name: Prepare release assets
+        # 固定文件名: 应用内更新走 releases/latest/download/<固定名>, 不依赖 GitHub API, 可套 ghproxy
         run: |
           mkdir -p release
-          cp app/build/outputs/apk/release/app-release.apk \
-             release/malguem-tv-${GITHUB_REF_NAME}.apk
+          cp app/build/outputs/apk/release/app-release.apk release/malguem-tv.apk
+          echo "{\"tag\":\"${GITHUB_REF_NAME}\"}" > release/version.json
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: malguem-tv-${{ github.ref_name }}
-          path: release/*.apk
+          path: release/*
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: release/*.apk
+          files: release/*
           generate_release_notes: true
