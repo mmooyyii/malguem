@@ -167,14 +167,16 @@ public class MainActivity extends AppCompatActivity {
 
     // 新增数据源: 先选类型, 再进对应配置弹窗
     private void showAddChooser() {
-        String[] types = {"WebDAV", "SMB", "本地硬盘"};
+        String[] types = {"扫描局域网 (alist/SMB)", "WebDAV", "SMB", "本地硬盘"};
         new AlertDialog.Builder(this)
                 .setTitle("选择数据源类型")
                 .setItems(types, (dialog, which) -> {
                     if (which == 0) {
-                        showWebdavDialog();
+                        startLanScan();
                     } else if (which == 1) {
-                        showSmbDialog();
+                        showWebdavDialog(null);
+                    } else if (which == 2) {
+                        showSmbDialog(null);
                     } else {
                         showLocalDialog();
                     }
@@ -182,11 +184,65 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    private void showWebdavDialog() {
+    // 扫描本机所在 /24 网段的 alist(5244)/SMB(445) 端口, 免得对着遥控器敲 IP
+    private void startLanScan() {
+        var ip = LanScanner.localIp();
+        if (ip == null) {
+            Toast.makeText(this, "没找到局域网 IP, 请检查网络", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        var subnet = ip.substring(0, ip.lastIndexOf('.'));
+        var progress = new AlertDialog.Builder(this)
+                .setTitle("扫描局域网")
+                .setMessage("正在扫描 " + subnet + ".1-254 的 5244(alist) / 445(SMB) 端口…")
+                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                .create();
+        progress.show();
+        new Thread(() -> {
+            var hits = LanScanner.scan(ip, new int[]{LanScanner.PORT_ALIST, LanScanner.PORT_SMB});
+            runOnUiThread(() -> {
+                if (isDestroyed() || !progress.isShowing()) {
+                    return; // 用户已取消或界面已销毁, 丢弃结果
+                }
+                progress.dismiss();
+                showScanResults(hits);
+            });
+        }, "lan-scanner").start();
+    }
+
+    private void showScanResults(List<LanScanner.Hit> hits) {
+        if (hits.isEmpty()) {
+            Toast.makeText(this, "没有扫到 alist / SMB 服务", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        var labels = new String[hits.size()];
+        for (int i = 0; i < hits.size(); i++) {
+            var h = hits.get(i);
+            labels[i] = h.ip + (h.port == LanScanner.PORT_ALIST ? "  ·  alist (WebDAV)" : "  ·  SMB");
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("发现的服务")
+                .setItems(labels, (dialog, which) -> {
+                    var h = hits.get(which);
+                    if (h.port == LanScanner.PORT_ALIST) {
+                        // alist 的 WebDAV 挂在 /dav 下
+                        showWebdavDialog("http://" + h.ip + ":" + LanScanner.PORT_ALIST + "/dav");
+                    } else {
+                        showSmbDialog(h.ip);
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private void showWebdavDialog(String prefillUrl) {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_login, null);
         final EditText etUsername = dialogView.findViewById(R.id.et_username);
         final EditText etPassword = dialogView.findViewById(R.id.et_password);
         final EditText etUrl = dialogView.findViewById(R.id.et_url);
+        if (prefillUrl != null) {
+            etUrl.setText(prefillUrl);
+        }
         new AlertDialog.Builder(this)
                 .setTitle("添加 WebDAV")
                 .setView(dialogView)
@@ -204,12 +260,15 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    private void showSmbDialog() {
+    private void showSmbDialog(String prefillHost) {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_smb, null);
         final EditText etHost = dialogView.findViewById(R.id.et_host);
         final EditText etShare = dialogView.findViewById(R.id.et_share);
         final EditText etUsername = dialogView.findViewById(R.id.et_username);
         final EditText etPassword = dialogView.findViewById(R.id.et_password);
+        if (prefillHost != null) {
+            etHost.setText(prefillHost);
+        }
         new AlertDialog.Builder(this)
                 .setTitle("添加 SMB")
                 .setView(dialogView)
