@@ -358,8 +358,9 @@ public class ComicActivity extends AppCompatActivity {
                 }
                 pageView.setText(getString(R.string.page, firstPage + 1, total));
                 try {
-                    // 漫画一页一张大图, 预取窗口放大到 8 页; 已缓存的页在 prepare 里会被跳过
-                    prepare_pages(8);
+                    // 漫画一页一张大图, 预取窗口 16 页 (慢链路上带宽闲着也是闲着, 挖深些抗快翻);
+                    // 已缓存的页在 prepare 里会被跳过
+                    prepare_pages(16);
                 } catch (InterruptedException ignore) {
                 }
             });

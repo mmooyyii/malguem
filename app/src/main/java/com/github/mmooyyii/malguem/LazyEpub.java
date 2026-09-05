@@ -42,10 +42,12 @@ public class LazyEpub implements Book {
     List<String> contents; // page -> html
     List<TocEntry> toc = new ArrayList<>(); // 目录 (标题 -> spine 页码), 没有目录时为空
 
-    // name -> 解压后的字节, 带容量上限的 LRU, 防止长时间阅读时无限增长导致 OOM
+    // name -> 解压后的字节, 带容量上限的 LRU, 防止长时间阅读时无限增长导致 OOM.
+    // 上限取 256MB 与 堆上限一半 的较小值: 大预取窗口需要更大的缓存, 但低内存盒子不能被撑爆
     private final LinkedHashMap<String, byte[]> resource = new LinkedHashMap<>(16, 0.75f, true);
     private long cacheBytes = 0;
-    private static final long MAX_CACHE_BYTES = 64L * 1024 * 1024;
+    private static final long MAX_CACHE_BYTES =
+            Math.min(256L * 1024 * 1024, Runtime.getRuntime().maxMemory() / 2);
 
     ConcurrentHashMap<String, String> resource_type; // name -> media_type name
     ConcurrentHashMap<String, CentralDirEntry> zip_dir; // page -> (offset,size)
