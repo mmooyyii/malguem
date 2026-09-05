@@ -30,7 +30,9 @@ public class CoverLoader {
 
     private final LruCache<String, Bitmap> memory;
     private final File diskDir;
-    private final ExecutorService pool = Executors.newFixedThreadPool(3);
+    private final Database.DatabaseHelper db;
+    // 封面加载是纯网络 IO 且链路延迟高, 并发放宽到 6
+    private final ExecutorService pool = Executors.newFixedThreadPool(6);
     private final Handler main = new Handler(Looper.getMainLooper());
 
     private CoverLoader(Context ctx) {
@@ -44,6 +46,7 @@ public class CoverLoader {
         diskDir = new File(ctx.getCacheDir(), "covers");
         //noinspection ResultOfMethodCallIgnored
         diskDir.mkdirs();
+        db = Database.getInstance(ctx).getDatabase();
     }
 
     // namespace 用于区分不同服务器/账号 (同名路径不冲突); target 加载成功显示, 失败隐藏(露出兜底封面)
@@ -60,7 +63,8 @@ public class CoverLoader {
             Bitmap bmp = readDisk(key);
             if (bmp == null) {
                 try {
-                    byte[] bytes = new LazyEpub(uri, client).cover();
+                    // 有持久化索引时 0 次往返完成 epub 初始化, 只为封面本体发一次请求
+                    byte[] bytes = LazyEpub.open(namespace, uri, client, db).cover();
                     if (bytes != null) {
                         bmp = decode(bytes);
                         if (bmp != null) {
@@ -76,6 +80,19 @@ public class CoverLoader {
             final Bitmap result = bmp;
             main.post(() -> show(target, key, result));
         });
+    }
+
+    // 清理缓存时调用, 磁盘文件由调用方删除
+    public void clearMemory() {
+        memory.evictAll();
+    }
+
+    // 删除单本书的封面缓存 (内存 + 磁盘)
+    public void removeCover(String namespace, String uri) {
+        var key = keyOf(namespace, uri);
+        memory.remove(key);
+        //noinspection ResultOfMethodCallIgnored
+        fileOf(key).delete();
     }
 
     private void show(ImageView target, String key, Bitmap bmp) {

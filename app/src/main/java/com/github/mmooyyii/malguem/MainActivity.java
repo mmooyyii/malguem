@@ -11,7 +11,7 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
-import android.view.LayoutInflater;
+import android.view.KeyEvent;
 import android.view.View;
 import android.widget.EditText;
 import android.widget.Toast;
@@ -22,8 +22,10 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import java.io.File;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -56,6 +58,8 @@ public class MainActivity extends AppCompatActivity {
                 });
         updater = new AppUpdater(this);
         updater.checkOnLaunch();
+        // 延迟启动后台索引爬取, 避开首屏封面加载抢网络
+        new Handler(Looper.getMainLooper()).postDelayed(() -> IndexCrawler.start(this), 8000);
     }
 
     public void setup_file_list() {
@@ -65,29 +69,8 @@ public class MainActivity extends AppCompatActivity {
         fileListView.setHasFixedSize(true);
         fileListAdapter = new FileListAdapter(this);
         fileListView.setAdapter(fileListAdapter);
-        fileListAdapter.setOnItemAction(new FileListAdapter.OnItemAction() {
-            @Override
-            public void onClick(ListItem file) {
-                onFileClicked(file);
-            }
-
-            @Override
-            public boolean onLongClick(ListItem file) {
-                return onFileLongClicked(file);
-            }
-        });
+        fileListAdapter.setOnItemAction(this::onFileClicked);
         init_resource_list();
-    }
-
-    private boolean onFileLongClicked(ListItem file) {
-        if (file.type == ListItem.FileType.Resource) {
-            showDeleteConfirmationDialog(file.id);
-        } else if (file.type == ListItem.FileType.Epub) {
-            var db = Database.getInstance(this).getDatabase();
-            db.switch_view_type(file.id, make_uri(file.name));
-            new FetchFileListTask().executeTask();
-        }
-        return true;
     }
 
     private void onFileClicked(ListItem file) {
@@ -277,6 +260,149 @@ public class MainActivity extends AppCompatActivity {
     protected void onDestroy() {
         fetchExecutor.shutdownNow();
         super.onDestroy();
+    }
+
+    // menu 键 = 原长按逻辑 (书切换小说/漫画, 数据源删除), 没聚焦可操作项时回落到缓存对话框;
+    // config/设置键 = 对聚焦的书删索引
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        if (keyCode == KeyEvent.KEYCODE_MENU) {
+            if (!menuOnFocusedItem()) {
+                showCacheDialog();
+            }
+            return true;
+        }
+        if (keyCode == KeyEvent.KEYCODE_SETTINGS) {
+            showBookConfigDialog();
+            return true;
+        }
+        return super.onKeyDown(keyCode, event);
+    }
+
+    // 取 RecyclerView 当前聚焦的条目, 没有则返回 null
+    private ListItem focusedItem() {
+        RecyclerView list = findViewById(R.id.fileListView);
+        var focused = list.getFocusedChild();
+        if (focused == null) {
+            return null;
+        }
+        var holder = list.findContainingViewHolder(focused);
+        if (holder == null) {
+            return null;
+        }
+        int pos = holder.getAdapterPosition();
+        if (pos < 0) {
+            return null;
+        }
+        return fileListAdapter.getItem(pos);
+    }
+
+    private boolean menuOnFocusedItem() {
+        var item = focusedItem();
+        if (item == null) {
+            return false;
+        }
+        if (item.type == ListItem.FileType.Resource) {
+            showDeleteConfirmationDialog(item.id);
+            return true;
+        }
+        if (item.type == ListItem.FileType.Epub) {
+            var db = Database.getInstance(this).getDatabase();
+            db.switch_view_type(item.id, item.uri != null ? item.uri : make_uri(item.name));
+            new FetchFileListTask().executeTask();
+            return true;
+        }
+        return false;
+    }
+
+    // 磁盘缓存: covers 封面缩略图, updates OTA 下载的 apk, SQLite 里的 epub 索引; 另有 CoverLoader 内存 LRU
+    private void showCacheDialog() {
+        File covers = new File(getCacheDir(), "covers");
+        File updates = new File(getCacheDir(), "updates");
+        long coverBytes = dir_size(covers);
+        long updateBytes = dir_size(updates);
+        var db = Database.getInstance(this).getDatabase();
+        long[] index = db.epub_index_stats();
+        String msg = "封面: " + file_count(covers) + " 张, " + format_size(coverBytes)
+                + "\n索引: " + index[0] + " 本, " + format_size(index[1])
+                + "\n更新包: " + format_size(updateBytes);
+        new AlertDialog.Builder(this)
+                .setTitle("缓存")
+                .setMessage(msg)
+                .setPositiveButton("清空", (dialog, which) -> {
+                    CoverLoader.get(this).clearMemory();
+                    delete_children(covers);
+                    delete_children(updates);
+                    db.clear_epub_index();
+                    Toast.makeText(this, "已清理 " + format_size(coverBytes + updateBytes + index[1]), Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton("关闭", (dialog, which) -> dialog.dismiss())
+                .show();
+    }
+
+    // config 键: 删除当前聚焦那本书的索引与封面缓存 (换源/文件被替换后手动重建用)
+    private void showBookConfigDialog() {
+        if (client == null) {
+            return;
+        }
+        var item = focusedItem();
+        if (item == null || item.type != ListItem.FileType.Epub) {
+            return;
+        }
+        final var uri = item.uri != null ? item.uri : make_uri(item.name);
+        final var ns = client.to_json();
+        new AlertDialog.Builder(this)
+                .setTitle(item.name)
+                .setItems(new String[]{"删除本书索引与封面缓存"}, (dialog, which) -> {
+                    var db = Database.getInstance(this).getDatabase();
+                    db.delete_epub_index(ns, uri);
+                    CoverLoader.get(this).removeCover(ns, uri);
+                    Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show();
+                    new FetchFileListTask().executeTask();
+                })
+                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                .show();
+    }
+
+    private static File[] list_files(File dir) {
+        File[] files = dir.listFiles();
+        return files == null ? new File[0] : files;
+    }
+
+    private static long dir_size(File dir) {
+        long total = 0;
+        for (var f : list_files(dir)) {
+            total += f.isDirectory() ? dir_size(f) : f.length();
+        }
+        return total;
+    }
+
+    private static int file_count(File dir) {
+        int n = 0;
+        for (var f : list_files(dir)) {
+            n += f.isDirectory() ? file_count(f) : 1;
+        }
+        return n;
+    }
+
+    private static void delete_children(File dir) {
+        for (var f : list_files(dir)) {
+            if (f.isDirectory()) {
+                delete_children(f);
+            }
+            //noinspection ResultOfMethodCallIgnored
+            f.delete();
+        }
+    }
+
+    private static String format_size(long bytes) {
+        if (bytes >= 1 << 20) {
+            return String.format(Locale.CHINA, "%.1f MB", bytes / 1048576.0);
+        }
+        if (bytes >= 1 << 10) {
+            return String.format(Locale.CHINA, "%.1f KB", bytes / 1024.0);
+        }
+        return bytes + " B";
     }
 
     @Override

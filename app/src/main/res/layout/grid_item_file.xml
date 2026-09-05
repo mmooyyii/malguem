@@ -7,13 +7,15 @@
     android:clickable="true"
     android:focusable="true"
     android:defaultFocusHighlightEnabled="false"
-    android:foreground="@drawable/card_foreground"
     android:stateListAnimator="@animator/sla_focus">
 
+    <!-- 焦点环画在封面上而不是整张卡片上, 避免描边压到下方的标题/状态文字 -->
     <FrameLayout
         android:id="@+id/cover"
         android:layout_width="match_parent"
         android:layout_height="@dimen/cover_height"
+        android:foreground="@drawable/card_foreground"
+        android:duplicateParentState="true"
         android:background="@drawable/cover_tile">
 
         <!-- 生成书封时的标题文字 (无封面图时显示) -->

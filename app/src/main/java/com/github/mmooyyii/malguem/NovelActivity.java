@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Pair;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.ViewGroup;
@@ -38,7 +39,7 @@ public class NovelActivity extends AppCompatActivity {
 
     private AlertDialog progressDialog;
 
-    private final BlockingQueue<Integer> taskQueue = new LinkedBlockingQueue<>();
+    private final BlockingQueue<Pair<Integer, Integer>> taskQueue = new LinkedBlockingQueue<>();
     private final ExecutorService executor = Executors.newFixedThreadPool(1);
     // 当前页的加载放到这个线程, 避免在 UI 线程上做网络 IO 造成 ANR
     private final ExecutorService loadExecutor = Executors.newSingleThreadExecutor();
@@ -72,7 +73,7 @@ public class NovelActivity extends AppCompatActivity {
             try {
                 while (!Thread.currentThread().isInterrupted()) {  // 检查中断状态
                     var n = taskQueue.take();
-                    epub_book.prepare(n, n + 1);
+                    epub_book.prepare(n.first, n.second);
                 }
             } catch (InterruptedException e) {
                 // 线程被中断时自动退出循环
@@ -114,12 +115,12 @@ public class NovelActivity extends AppCompatActivity {
         view.destroy();
     }
 
+    // 预取后续 n 章: 整个区间一次 prepare, 章节正文和图片各合成一次批量请求, 而不是一章一章串行取
     public void prepare_pages(int n) throws InterruptedException {
-        for (var i = epub_book_page + 2; i < epub_book_page + 2 + n; i++) {
-            if (i >= epub_book.total_pages()) {
-                return;
-            }
-            taskQueue.put(i);
+        var from = Math.min(epub_book_page + 1, epub_book.total_pages());
+        var to = Math.min(epub_book_page + 1 + n, epub_book.total_pages());
+        if (from < to) {
+            taskQueue.put(Pair.create(from, to));
         }
     }
 
@@ -223,7 +224,8 @@ public class NovelActivity extends AppCompatActivity {
                     var db = Database.getInstance(NovelActivity.this).getDatabase();
                     var info = db.get_epub_info(resource_id, book_uri);
                     epub_book_page = info.current_page;
-                    epub_book = new LazyEpub(book_uri, client);
+                    // 有持久化索引时 0 次网络往返完成开书
+                    epub_book = LazyEpub.open(client.to_json(), book_uri, client, db);
                     handler.post(() -> {
                         if (isDestroyed()) {
                             return; // 活动已销毁时窗口已被系统回收, 再 dismiss 会抛 View not attached

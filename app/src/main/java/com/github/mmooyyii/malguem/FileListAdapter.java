@@ -21,8 +21,6 @@ public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
 
     public interface OnItemAction {
         void onClick(ListItem item);
-
-        boolean onLongClick(ListItem item);
     }
 
     // 生成书封(无封面图时)的柔和色板
@@ -120,7 +118,6 @@ public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
                 action.onClick(item);
             }
         });
-        h.itemView.setOnLongClickListener(v -> action != null && action.onLongClick(item));
     }
 
     private void bindEpub(VH h, ListItem item, String display) {

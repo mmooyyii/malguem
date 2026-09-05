@@ -9,11 +9,16 @@ import java.nio.charset.StandardCharsets;
 import java.util.AbstractMap;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.StringJoiner;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -29,6 +34,13 @@ public class WebdavResource implements ResourceInterface {
     String password;
 
     private final OkHttpClient client = new OkHttpClient();
+
+    // 高延迟链路(如 Alist 代理网盘)上单连接吞吐有限, 大批量 range 拆成多条连接并行拉
+    private static final int MAX_PARALLEL = 4;
+    private static final long BYTES_PER_CONN = 512 * 1024; // 每多开一条连接所需的最小数据量
+    private static final ExecutorService parallel_pool = Executors.newFixedThreadPool(MAX_PARALLEL);
+    // 观测到服务器不支持 Range(返回 200 全量)后不再拆分, 避免并行请求各自拉全文件
+    private volatile boolean range_unsupported = false;
 
     private final Pattern pattern_ranges = Pattern.compile("bytes (\\d+)-(\\d+)/");
 
@@ -107,6 +119,71 @@ public class WebdavResource implements ResourceInterface {
     }
 
     public HashMap<Slice, byte[]> open(String uri, List<Slice> slices) throws Exception {
+        var groups = splitForParallel(slices);
+        if (groups.size() <= 1) {
+            return openOnce(uri, slices);
+        }
+        var futures = new ArrayList<Future<HashMap<Slice, byte[]>>>();
+        for (var g : groups) {
+            futures.add(parallel_pool.submit(() -> openOnce(uri, g)));
+        }
+        var output = new HashMap<Slice, byte[]>();
+        Exception failed = null;
+        for (var f : futures) {
+            try {
+                output.putAll(f.get());
+            } catch (ExecutionException e) {
+                failed = e.getCause() instanceof Exception ? (Exception) e.getCause() : e;
+            }
+        }
+        if (failed != null) {
+            throw failed;
+        }
+        return output;
+    }
+
+    // 把多个 slice 按总字节量切成最多 MAX_PARALLEL 组; 按 offset 排序后连续切分, 相邻区间落在同组便于服务器合并
+    private List<List<Slice>> splitForParallel(List<Slice> slices) {
+        var output = new ArrayList<List<Slice>>();
+        if (range_unsupported || slices.size() < 2) {
+            output.add(slices);
+            return output;
+        }
+        long total = 0;
+        for (var s : slices) {
+            if (s.offset == null || s.offset < 0 || s.size == null) {
+                // 有后缀/开区间 range 时无法估算大小, 不拆分
+                output.add(slices);
+                return output;
+            }
+            total += s.size;
+        }
+        int groups = (int) Math.min(MAX_PARALLEL, total / BYTES_PER_CONN + 1);
+        if (groups <= 1) {
+            output.add(slices);
+            return output;
+        }
+        var sorted = new ArrayList<>(slices);
+        sorted.sort(Comparator.comparingInt(a -> a.offset));
+        long target = (total + groups - 1) / groups;
+        var cur = new ArrayList<Slice>();
+        long acc = 0;
+        for (var s : sorted) {
+            cur.add(s);
+            acc += s.size;
+            if (acc >= target && output.size() < groups - 1) {
+                output.add(cur);
+                cur = new ArrayList<>();
+                acc = 0;
+            }
+        }
+        if (!cur.isEmpty()) {
+            output.add(cur);
+        }
+        return output;
+    }
+
+    private HashMap<Slice, byte[]> openOnce(String uri, List<Slice> slices) throws Exception {
         var builder = new Request.Builder().url(url + uri).addHeader("Authorization", Credentials.basic(username, password));
         var sj = new StringJoiner(",");
         for (var slice : slices) {
@@ -148,6 +225,7 @@ public class WebdavResource implements ResourceInterface {
 
     // 服务器不支持 Range 而返回整个文件时, 在本地按请求的 offset/size 切片
     private HashMap<Slice, byte[]> sliceLocally(byte[] bytes, List<Slice> slices) {
+        range_unsupported = true; // 之后不再做并行拆分, 避免多条连接各自拉全量
         var output = new HashMap<Slice, byte[]>();
         for (var slice : slices) {
             int off = slice.offset;

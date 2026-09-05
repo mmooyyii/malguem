@@ -210,7 +210,8 @@ public class ComicActivity extends AppCompatActivity {
                 }
                 pageView.setText(getString(R.string.page, leftPage + 1, total));
                 try {
-                    prepare_pages(5);
+                    // 漫画一页一张大图, 预取窗口放大到 8 页; 已缓存的页在 prepare 里会被跳过
+                    prepare_pages(8);
                 } catch (InterruptedException ignore) {
                 }
             });
@@ -245,7 +246,9 @@ public class ComicActivity extends AppCompatActivity {
             loadExecutor.execute(() -> {
                 try {
                     LoadReadHistory();
-                    epub_book = new LazyEpub(book_uri, client);
+                    // 有持久化索引时 0 次网络往返完成开书
+                    var db = Database.getInstance(ComicActivity.this).getDatabase();
+                    epub_book = LazyEpub.open(client.to_json(), book_uri, client, db);
                     handler.post(() -> {
                         if (isDestroyed()) {
                             return; // 活动已销毁时窗口已被系统回收, 再 dismiss 会抛 View not attached

@@ -1,5 +1,7 @@
 package com.github.mmooyyii.malguem;
 
+import com.google.gson.Gson;
+
 import org.jsoup.Jsoup;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
@@ -18,6 +20,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.zip.Inflater;
 
@@ -46,6 +49,9 @@ public class LazyEpub implements Book {
     ConcurrentHashMap<String, String> resource_type; // name -> media_type name
     ConcurrentHashMap<String, CentralDirEntry> zip_dir; // page -> (offset,size)
 
+    // 全部条目本地头偏移的有序数组: 相邻条目的偏移差就是该条目 [本地头+数据] 的精确长度, 批量读时无需先取头再取数据
+    private long[] sortedOffsets = new long[0];
+
 
     Integer centralDirOffset;
     Integer centralDirSize;
@@ -60,6 +66,101 @@ public class LazyEpub implements Book {
         zip_dir = new ConcurrentHashMap<>();
         resource_type = new ConcurrentHashMap<>();
         init_epub_dir();
+    }
+
+    // 从持久化索引恢复, 不发任何网络请求; 索引格式不兼容时抛异常, 由调用方删除索引后走网络重建
+    public LazyEpub(String epub_uri, ResourceInterface client, String index_json) {
+        uri = epub_uri;
+        file = client;
+        contents = new ArrayList<>();
+        zip_dir = new ConcurrentHashMap<>();
+        resource_type = new ConcurrentHashMap<>();
+        var data = new Gson().fromJson(index_json, IndexData.class);
+        if (data == null || data.v != INDEX_VERSION || data.entries == null || data.spine == null) {
+            throw new IllegalArgumentException("索引格式不兼容");
+        }
+        title = data.title;
+        opf_file = data.opf;
+        cover_href = data.cover;
+        centralDirOffset = data.cd_off;
+        centralDirSize = data.cd_size;
+        for (var ie : data.entries) {
+            registerEntry(new CentralDirEntry(ie.n, ie.c, ie.u, ie.o, ie.m, 0));
+        }
+        contents.addAll(data.spine);
+        if (data.types != null) {
+            resource_type.putAll(data.types);
+        }
+        buildSortedOffsets();
+    }
+
+    // 优先用 SQLite 里的索引 0 往返完成初始化; 没有(或损坏)则网络解析并落库
+    public static LazyEpub open(String namespace, String epub_uri, ResourceInterface client, Database.DatabaseHelper db) throws Exception {
+        var json = db.get_epub_index(namespace, epub_uri);
+        if (json != null) {
+            try {
+                return new LazyEpub(epub_uri, client, json);
+            } catch (Exception e) {
+                db.delete_epub_index(namespace, epub_uri);
+            }
+        }
+        var book = new LazyEpub(epub_uri, client);
+        try {
+            db.put_epub_index(namespace, epub_uri, book.index_json());
+        } catch (Exception ignore) {
+        }
+        return book;
+    }
+
+    // ---- 索引持久化: 中央目录 + opf 解析结果, 路径做主键, 不做内容失效 (epub 默认不改) ----
+    private static final int INDEX_VERSION = 1;
+
+    static class IndexEntry {
+        String n; // fileName
+        long o;   // localHeaderOffset
+        long c;   // compressedSize
+        long u;   // uncompressedSize
+        int m;    // compressionMethod
+    }
+
+    static class IndexData {
+        int v;
+        String opf;
+        String cover;
+        String title;
+        Integer cd_off;
+        Integer cd_size;
+        List<String> spine;
+        HashMap<String, String> types;
+        List<IndexEntry> entries;
+    }
+
+    public String index_json() {
+        var data = new IndexData();
+        data.v = INDEX_VERSION;
+        data.opf = opf_file;
+        data.cover = cover_href;
+        data.title = title;
+        data.cd_off = centralDirOffset;
+        data.cd_size = centralDirSize;
+        data.spine = contents;
+        data.types = new HashMap<>(resource_type);
+        // zip_dir 里有子路径别名指向同一条目, 按 fileName 去重后只存原始条目
+        var byName = new HashMap<String, CentralDirEntry>();
+        for (var e : zip_dir.values()) {
+            byName.put(e.fileName, e);
+        }
+        data.entries = new ArrayList<>();
+        for (var e : byName.values()) {
+            var ie = new IndexEntry();
+            ie.n = e.fileName;
+            ie.o = e.localHeaderOffset;
+            ie.c = e.compressedSize;
+            ie.u = e.uncompressedSize;
+            ie.m = e.compressionMethod;
+            data.entries.add(ie);
+        }
+        return new Gson().toJson(data);
     }
 
     private void init_epub_dir() throws Exception {
@@ -82,8 +183,21 @@ public class LazyEpub implements Book {
             s.size = centralDirSize;
             initCentralDirectory(file.open(uri, s));
         }
+        buildSortedOffsets();
         // 不再预取所有条目的本地头(initCompressedOffset), 改为按需在 load 时惰性获取
         initContent();
+    }
+
+    private void buildSortedOffsets() {
+        var set = new TreeSet<Long>();
+        for (var e : zip_dir.values()) {
+            set.add(e.localHeaderOffset);
+        }
+        sortedOffsets = new long[set.size()];
+        int i = 0;
+        for (var v : set) {
+            sortedOffsets[i++] = v;
+        }
     }
 
     private synchronized boolean cacheHas(String name) {
@@ -259,16 +373,7 @@ public class LazyEpub implements Book {
             String fileName = new String(centralDirData, position + 46, fileNameLength);
             // 构建条目对象
             CentralDirEntry entry = new CentralDirEntry(fileName, compressedSize, uncompressedSize, localHeaderOffset, compressionMethod, extraFieldLength);
-            Path path = Paths.get(fileName);
-            // 遍历路径的每一部分
-            for (int i = 0; i < path.getNameCount(); i++) {
-                // 获取从第 i 部分到末尾的子路径
-                var subPath = path.subpath(i, path.getNameCount()).toString();
-                if (!zip_dir.containsKey(subPath)) {
-                    zip_dir.put(subPath, entry);
-                }
-            }
-            zip_dir.put(fileName, entry);
+            registerEntry(entry);
             if (fileName.endsWith(".opf")) {
                 // 正确做法应该是去META-INF/container.xml里找, 这样做应该也行
                 opf_file = fileName;
@@ -276,6 +381,18 @@ public class LazyEpub implements Book {
             // 计算下一个条目的起始位置
             position += 46 + fileNameLength + extraFieldLength + fileCommentLength;
         }
+    }
+
+    // 以完整文件名及其每级子路径为 key 注册条目 (页面里的相对引用常用子路径)
+    private void registerEntry(CentralDirEntry entry) {
+        Path path = Paths.get(entry.fileName);
+        for (int i = 0; i < path.getNameCount(); i++) {
+            var subPath = path.subpath(i, path.getNameCount()).toString();
+            if (!zip_dir.containsKey(subPath)) {
+                zip_dir.put(subPath, entry);
+            }
+        }
+        zip_dir.put(entry.fileName, entry);
     }
 
 
@@ -395,34 +512,74 @@ public class LazyEpub implements Book {
         if (needed.isEmpty()) {
             return;
         }
-        if (needed.size() == 1) {
-            // 单文件: 本地头 + 压缩数据一次取回, 省一轮往返
-            var f = needed.get(0);
-            overReadOne(f, zip_dir.get(f));
-        } else {
-            // 多文件: 先批量取本地头定位数据偏移, 再批量取精确数据 (避免 range 重叠被服务器合并)
-            twoPhase(needed);
-        }
+        onePhase(needed);
     }
 
-    // 单文件惰性加载: 一次读回 [本地头 + 压缩数据], 按真实偏移裁切
-    private void overReadOne(String filename, CentralDirEntry entry) throws Exception {
-        var slice = new Slice();
-        slice.offset = Math.toIntExact(entry.localHeaderOffset);
-        long span = 30L + entry.fileName.getBytes(StandardCharsets.UTF_8).length
+    // 条目 [本地头+数据] 的精确长度: 相邻条目的偏移差 (含数据描述符); 兜底用文件名长度+冗余估算.
+    // 取两者较小值, 既不越入下一条目 (multi-range 不出现重叠区间), 也不为大间隙多拉数据
+    private long spanOf(CentralDirEntry entry) {
+        long slackSpan = 30L + entry.fileName.getBytes(StandardCharsets.UTF_8).length
                 + HEADER_SLACK + entry.compressedSize;
-        slice.size = Math.toIntExact(span);
-        byte[] raw = file.open(uri, slice);
-        int size = Math.toIntExact(entry.compressedSize);
-        if (raw == null || raw.length < parseDataOffset(raw) + size) {
-            // 冗余不够(超大扩展字段), 走精确两段式兜底
-            var one = new ArrayList<String>();
-            one.add(filename);
-            twoPhase(one);
+        int idx = Arrays.binarySearch(sortedOffsets, entry.localHeaderOffset);
+        long next = -1;
+        if (idx >= 0 && idx + 1 < sortedOffsets.length) {
+            next = sortedOffsets[idx + 1];
+        } else if (idx >= 0 && centralDirOffset != null && centralDirOffset > entry.localHeaderOffset) {
+            next = centralDirOffset;
+        }
+        if (next > entry.localHeaderOffset) {
+            return Math.min(next - entry.localHeaderOffset, slackSpan);
+        }
+        return slackSpan;
+    }
+
+    // 单相批量加载: 每个条目按精确区间一次取回 [本地头+压缩数据], 全部合成一次 multi-range 请求 (1 次往返).
+    // 个别条目区间不足(超大扩展字段等)时回退两段式
+    private void onePhase(List<String> filenames) throws Exception {
+        var slices = new ArrayList<Slice>();
+        var sliceToFile = new HashMap<Slice, String>();
+        for (var filename : filenames) {
+            var entry = zip_dir.get(filename);
+            if (entry == null) {
+                continue;
+            }
+            var s = new Slice();
+            s.offset = Math.toIntExact(entry.localHeaderOffset);
+            s.size = Math.toIntExact(spanOf(entry));
+            slices.add(s);
+            sliceToFile.put(s, filename);
+        }
+        if (slices.isEmpty()) {
             return;
         }
-        int dataStart = (int) parseDataOffset(raw);
-        store(filename, entry, Arrays.copyOfRange(raw, dataStart, dataStart + size));
+        var raws = file.open(uri, slices);
+        var fallback = new ArrayList<String>();
+        for (var s : slices) {
+            var filename = sliceToFile.get(s);
+            if (filename == null) {
+                continue;
+            }
+            var entry = zip_dir.get(filename);
+            var raw = raws.get(s);
+            if (entry == null || raw == null) {
+                fallback.add(filename);
+                continue;
+            }
+            try {
+                int dataStart = Math.toIntExact(parseDataOffset(raw));
+                int size = Math.toIntExact(entry.compressedSize);
+                if (raw.length < dataStart + size) {
+                    fallback.add(filename);
+                    continue;
+                }
+                store(filename, entry, Arrays.copyOfRange(raw, dataStart, dataStart + size));
+            } catch (Exception e) {
+                fallback.add(filename);
+            }
+        }
+        if (!fallback.isEmpty()) {
+            twoPhase(fallback);
+        }
     }
 
     // 多文件惰性加载: 阶段1批量取本地头(小区间)定位偏移, 阶段2批量取精确压缩数据

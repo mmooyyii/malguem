@@ -36,12 +36,16 @@ public class Database {
 
         // 数据库名称和版本
         private static final String DATABASE_NAME = "malguem.db";
-        private static final int DATABASE_VERSION = 2;
+        private static final int DATABASE_VERSION = 3;
 
         // 创建表的 SQL 语句
         private static final String RESOURCE_TABLE = "CREATE TABLE resource (id INTEGER PRIMARY KEY, name TEXT NOT NULL, resource_type INTEGER NOT NULL, json_info TEXT NOT NULL);";
 
         private static final String EPUB_TABLE = "CREATE TABLE epub (resource_id INTEGER NOT NULL,path TEXT NOT NULL, total_page INTEGER NOT NULL default 0, current_page INTEGER NOT NULL default 0, page_offset INTEGER NOT NULL default 0, view_type INTEGER NOT NULL default 0, PRIMARY KEY (resource_id, path));";
+
+        // epub 索引缓存: 中央目录 + opf 解析结果, 免掉开书/加载封面时的元数据网络往返.
+        // namespace 是数据源配置的 json(区分不同服务器/账号), path 是包内路径, 一起做主键; 不做内容失效
+        private static final String EPUB_INDEX_TABLE = "CREATE TABLE epub_index (namespace TEXT NOT NULL, path TEXT NOT NULL, json TEXT NOT NULL, updated_at INTEGER NOT NULL default 0, PRIMARY KEY (namespace, path));";
 
         public DatabaseHelper(Context context) {
             super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -52,15 +56,24 @@ public class Database {
             // 创建数据库表
             db.execSQL(RESOURCE_TABLE);
             db.execSQL(EPUB_TABLE);
+            db.execSQL(EPUB_INDEX_TABLE);
             Log.d("db", "create database");
         }
 
         @Override
         public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-            // 升级数据库时的操作，例如删除旧表并创建新表
-            db.execSQL("drop table IF EXISTS epub");
-            db.execSQL("drop table IF EXISTS resource");
-            onCreate(db);
+            if (oldVersion < 2) {
+                // v2 之前无兼容路径, 重建 (会丢阅读进度, 仅影响远古版本)
+                db.execSQL("drop table IF EXISTS epub");
+                db.execSQL("drop table IF EXISTS resource");
+                db.execSQL("drop table IF EXISTS epub_index");
+                onCreate(db);
+                return;
+            }
+            if (oldVersion < 3) {
+                // v3 新增 epub 索引表, 保留既有数据
+                db.execSQL(EPUB_INDEX_TABLE);
+            }
         }
 
         // type: 1=webdav 2=smb 3=local; json 由各 ResourceInterface.to_json() 生成(自带 type 字段)
@@ -180,6 +193,63 @@ public class Database {
             }
             cursor.close();
             return list;
+        }
+
+        // ---- epub 索引缓存 ----
+
+        public String get_epub_index(String namespace, String path) {
+            var db = getReadableDatabase();
+            var cursor = db.query("epub_index", new String[]{"json"}, "namespace=? and path=?",
+                    new String[]{namespace, path}, null, null, null);
+            String json = null;
+            if (cursor.moveToNext()) {
+                json = cursor.getString(0);
+            }
+            cursor.close();
+            return json;
+        }
+
+        public void put_epub_index(String namespace, String path, String json) {
+            var db = getWritableDatabase();
+            var values = new ContentValues();
+            values.put("namespace", namespace);
+            values.put("path", path);
+            values.put("json", json);
+            values.put("updated_at", System.currentTimeMillis());
+            db.insertWithOnConflict("epub_index", null, values, SQLiteDatabase.CONFLICT_REPLACE);
+        }
+
+        public void delete_epub_index(String namespace, String path) {
+            getWritableDatabase().delete("epub_index", "namespace=? and path=?", new String[]{namespace, path});
+        }
+
+        // 全部 (namespace, path) 行, 供孤儿回收比对
+        public List<String[]> epub_index_rows() {
+            var db = getReadableDatabase();
+            var cursor = db.query("epub_index", new String[]{"namespace", "path"}, null, null, null, null, null);
+            var out = new ArrayList<String[]>();
+            while (cursor.moveToNext()) {
+                out.add(new String[]{cursor.getString(0), cursor.getString(1)});
+            }
+            cursor.close();
+            return out;
+        }
+
+        // {条数, json 总字节数}, 供缓存对话框展示
+        public long[] epub_index_stats() {
+            var db = getReadableDatabase();
+            var cursor = db.rawQuery("select count(*), coalesce(sum(length(json)), 0) from epub_index", null);
+            var out = new long[]{0, 0};
+            if (cursor.moveToNext()) {
+                out[0] = cursor.getLong(0);
+                out[1] = cursor.getLong(1);
+            }
+            cursor.close();
+            return out;
+        }
+
+        public void clear_epub_index() {
+            getWritableDatabase().delete("epub_index", null, null);
         }
 
         private String make_in_list(int n) {
