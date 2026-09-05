@@ -145,7 +145,7 @@ public class OpdsResource implements ResourceInterface {
             }
             try (var response = httpClient().newCall(b.build()).execute()) {
                 if (!response.isSuccessful() || response.body() == null) {
-                    throw new IOException("OPDS http " + response.code() + ": " + next);
+                    throw new HttpStatusException(response.code(), "OPDS " + next);
                 }
                 next = parseFeed(response.body().bytes(), next, out, seen);
             }

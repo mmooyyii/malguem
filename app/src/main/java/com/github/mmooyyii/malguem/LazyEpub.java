@@ -250,7 +250,8 @@ public class LazyEpub implements Book {
         if (html != null) {
             return new String(html, StandardCharsets.UTF_8);
         }
-        return "无法读取html";
+        // 章节内容缺失时的兜底页; 这里拿不到 Context, 直接双语
+        return "Failed to load this page / 本页加载失败";
     }
 
     @Override

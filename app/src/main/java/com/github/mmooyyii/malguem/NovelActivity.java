@@ -251,7 +251,13 @@ public class NovelActivity extends AppCompatActivity {
 
     // OK/菜单键呼出的阅读菜单
     private void showReaderMenu() {
-        String[] items = {"目录", "跳转到页", "字号", "夜间模式: " + (dark ? "开" : "关"), "切换为漫画模式"};
+        String[] items = {
+                getString(R.string.menu_toc),
+                getString(R.string.menu_jump),
+                getString(R.string.menu_zoom),
+                getString(R.string.menu_dark, getString(dark ? R.string.on : R.string.off)),
+                getString(R.string.menu_to_comic),
+        };
         new AlertDialog.Builder(this)
                 .setItems(items, (dialog, which) -> {
                     if (which == 0) {
@@ -289,7 +295,7 @@ public class NovelActivity extends AppCompatActivity {
     private void showTocDialog() {
         var toc = epub_book.toc();
         if (toc.isEmpty()) {
-            Toast.makeText(this, "本书没有目录", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.no_toc, Toast.LENGTH_SHORT).show();
             return;
         }
         var titles = new String[toc.size()];
@@ -301,7 +307,7 @@ public class NovelActivity extends AppCompatActivity {
             }
         }
         new AlertDialog.Builder(this)
-                .setTitle("目录")
+                .setTitle(R.string.menu_toc)
                 .setSingleChoiceItems(titles, current, (dialog, which) -> {
                     epub_book_page = toc.get(which).page;
                     notifyPageChanged(0);
@@ -334,13 +340,13 @@ public class NovelActivity extends AppCompatActivity {
         bar.setProgress(epub_book_page);
         label.setText(getString(R.string.page, epub_book_page + 1, total));
         new AlertDialog.Builder(this)
-                .setTitle("跳转到页")
+                .setTitle(R.string.menu_jump)
                 .setView(view)
-                .setPositiveButton("跳转", (dialog, which) -> {
+                .setPositiveButton(R.string.jump, (dialog, which) -> {
                     epub_book_page = bar.getProgress();
                     notifyPageChanged(0);
                 })
-                .setNegativeButton("取消", null)
+                .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
@@ -358,7 +364,7 @@ public class NovelActivity extends AppCompatActivity {
             }
         }
         new AlertDialog.Builder(this)
-                .setTitle("字号")
+                .setTitle(R.string.menu_zoom)
                 .setSingleChoiceItems(labels, current, (dialog, which) -> {
                     int zoom = TEXT_ZOOMS[which];
                     prefs.edit().putInt("novel_text_zoom", zoom).apply();
@@ -423,7 +429,7 @@ public class NovelActivity extends AppCompatActivity {
                         // pdf 整本下载到缓存后按页渲染 (PdfRenderer 只认本地文件)
                         epub_book = PdfBook.open(client.to_json(), book_uri, client, getCacheDir(),
                                 done -> handler.post(() -> progressMessageTextView.setText(
-                                        "正在下载 PDF " + fmt.format(done / 1048576.0) + " MB")));
+                                        getString(R.string.pdf_downloading, fmt.format(done / 1048576.0)))));
                     } else {
                         // 有持久化索引时 0 次网络往返完成开书
                         epub_book = LazyEpub.open(client.to_json(), book_uri, client, db);
@@ -443,7 +449,9 @@ public class NovelActivity extends AppCompatActivity {
                             return;
                         }
                         progressDialog.dismiss();
-                        Toast.makeText(NovelActivity.this, "打开 epub 失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        Toast.makeText(NovelActivity.this,
+                                getString(R.string.open_book_failed, Errors.describe(NovelActivity.this, e)),
+                                Toast.LENGTH_LONG).show();
                         finish();
                     });
                 }

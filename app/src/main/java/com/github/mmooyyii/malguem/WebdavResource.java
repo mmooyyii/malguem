@@ -76,7 +76,10 @@ public class WebdavResource implements ResourceInterface {
         Request request = new Request.Builder().url(make_dir_url(path)).method("PROPFIND", null).addHeader("Depth", "1").addHeader("Authorization", Credentials.basic(username, password)).build();
         // 进行解码操作
         try (Response response = client.newCall(request).execute()) {
-            if (response.isSuccessful() && response.code() == 207) {
+            if (!response.isSuccessful()) {
+                throw new HttpStatusException(response.code(), "ls " + make_dir_url(path));
+            }
+            if (response.code() == 207) {
                 assert response.body() != null;
                 String responseBody = response.body().string();
                 String regex = "<D:href>(.*?)</D:href>";
@@ -193,7 +196,10 @@ public class WebdavResource implements ResourceInterface {
         builder.addHeader("Range", "bytes=" + sj);
         var request = builder.build();
         try (Response response = client.newCall(request).execute()) {
-            if (response.isSuccessful()) {
+            if (!response.isSuccessful()) {
+                throw new HttpStatusException(response.code(), "open " + url + uri);
+            }
+            {
                 assert response.body() != null;
                 var bytes = response.body().bytes();
                 var contentType = response.header("Content-Type");
@@ -221,7 +227,6 @@ public class WebdavResource implements ResourceInterface {
                 return output;
             }
         }
-        throw new IOException("http 请求失败, 打不开" + url);
     }
 
     // 服务器不支持 Range 而返回整个文件时, 在本地按请求的 offset/size 切片

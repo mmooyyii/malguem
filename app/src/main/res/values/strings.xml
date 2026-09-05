@@ -1,9 +1,115 @@
 <resources>
-    <string name="app_name">malguem</string>
-    <string name="my_library">我的书库</string>
-    <string name="opening_epub">正在打开epub</string>
-    <string name="parse_epub">解析epub中</string>
-    <string name="load_percent">已完成 %1$s MB / %2$s MB</string>
-    <string name="page">%1$d / %2$d</string>
-    <string name="http_error">http请求失败</string>
+    <string name="app_name" translatable="false">malguem</string>
+    <string name="my_library">My Library</string>
+    <string name="opening_epub">Opening book…</string>
+    <string name="load_percent">%1$s MB / %2$s MB loaded</string>
+    <string name="page" translatable="false">%1$d / %2$d</string>
+
+    <!-- 通用按钮 -->
+    <string name="ok_add">Add</string>
+    <string name="ok_save">Save</string>
+    <string name="cancel">Cancel</string>
+    <string name="delete">Delete</string>
+    <string name="edit">Edit</string>
+    <string name="close">Close</string>
+    <string name="retry">Retry</string>
+    <string name="back_home">Home</string>
+
+    <!-- 首页 / 数据源 -->
+    <string name="add_source">Add source</string>
+    <string name="choose_source_type">Source type</string>
+    <string name="source_scan">Scan LAN (alist/SMB)</string>
+    <string name="source_opds" translatable="false">OPDS (Komga/Kavita/Calibre-Web)</string>
+    <string name="source_local">Local storage</string>
+    <string name="empty_hint">Library is empty\n\nPress OK to add a source\nLAN scan for alist / SMB is supported</string>
+    <string name="db_error">Database error</string>
+    <string name="source_gone">This source has been deleted</string>
+    <string name="confirm_delete">Delete this source?</string>
+    <string name="delete_ok">Deleted</string>
+    <string name="add_ok">Added</string>
+    <string name="save_ok">Saved</string>
+    <string name="add_webdav">Add WebDAV</string>
+    <string name="edit_webdav">Edit WebDAV</string>
+    <string name="add_smb">Add SMB</string>
+    <string name="edit_smb">Edit SMB</string>
+    <string name="add_opds">Add OPDS library</string>
+    <string name="edit_opds">Edit OPDS library</string>
+    <string name="add_local">Add local folder</string>
+    <string name="edit_local">Edit local folder</string>
+    <string name="label_url" translatable="false">URL</string>
+    <string name="label_username">Username</string>
+    <string name="label_password">Password</string>
+    <string name="label_host">Host</string>
+    <string name="label_share">Share</string>
+    <string name="label_path">Folder path</string>
+
+    <!-- 局域网扫描 -->
+    <string name="no_lan_ip">No LAN IP found, check the network</string>
+    <string name="scan_lan_title">Scanning LAN</string>
+    <string name="scanning">Scanning %1$s.1-254 for ports 5244 (alist) / 445 (SMB)…</string>
+    <string name="scan_empty">No alist / SMB service found</string>
+    <string name="scan_found">Services found</string>
+
+    <!-- 条目菜单 -->
+    <string name="menu_switch_view">Switch comic/novel</string>
+    <string name="menu_remove_recent">Remove from recents</string>
+    <string name="book_delete_index">Delete this book\'s index and cover cache</string>
+    <string name="deleted">Deleted</string>
+
+    <!-- 帮助 -->
+    <string name="help_title">Help</string>
+    <string name="help_version">Version: %1$s</string>
+    <string name="help_keys">Keys:\n· MENU / long-press OK — book: switch comic/novel; source: edit/delete; recents: switch/remove\n· SETTINGS — delete the focused book\'s index and cover\n· OK while reading — contents / go to page / font size / dark mode / direction / single page</string>
+    <string name="help_cache">Cache:\nCovers %1$d, %2$s\nIndexes %3$d, %4$s\nPDF %5$d, %6$s\nUpdates %7$s</string>
+    <string name="check_update">Check updates</string>
+    <string name="clear_cache">Clear cache</string>
+    <string name="cleared">Cleared %1$s</string>
+    <string name="press_back_again">Press BACK again to exit</string>
+    <string name="list_error_title">Failed to load folder</string>
+
+    <!-- 阅读菜单 -->
+    <string name="menu_toc">Contents</string>
+    <string name="menu_jump">Go to page</string>
+    <string name="menu_zoom">Font size</string>
+    <string name="menu_dark">Dark mode: %1$s</string>
+    <string name="menu_direction">Reading direction: %1$s</string>
+    <string name="menu_single">Single page: %1$s</string>
+    <string name="menu_to_comic">Switch to comic mode</string>
+    <string name="menu_to_novel">Switch to novel mode</string>
+    <string name="on">on</string>
+    <string name="off">off</string>
+    <string name="dir_rtl">right → left (manga)</string>
+    <string name="dir_ltr">left → right</string>
+    <string name="switched_rtl">Switched to right → left (manga)</string>
+    <string name="switched_ltr">Switched to left → right</string>
+    <string name="no_toc">This book has no table of contents</string>
+    <string name="jump">Go</string>
+    <string name="open_book_failed">Failed to open: %1$s</string>
+    <string name="pdf_downloading">Downloading PDF, %1$s MB</string>
+
+    <!-- 书封角标 -->
+    <string name="novel_label">Novel</string>
+    <string name="comic_label">Comic</string>
+    <string name="unread">New</string>
+
+    <!-- OTA 更新 -->
+    <string name="checking_update">Checking for updates…</string>
+    <string name="update_check_failed">Update check failed, no source reachable</string>
+    <string name="already_latest">Up to date: %1$s</string>
+    <string name="new_version">New version %1$s</string>
+    <string name="update_ask">Current version is %1$s. Download the update?</string>
+    <string name="update_now">Update</string>
+    <string name="update_later">Later</string>
+    <string name="downloading">Downloading %1$s</string>
+    <string name="download_failed">Download failed: %1$s</string>
+    <string name="install_perm_title">Install permission required</string>
+    <string name="install_perm_msg">First update needs permission to install unknown apps. Installation continues automatically after granting.</string>
+    <string name="grant">Grant</string>
+
+    <!-- 分类后的报错提示 -->
+    <string name="err_network">Cannot reach the server. Check the network and the source address.</string>
+    <string name="err_auth">Authentication failed. Check the username and password.</string>
+    <string name="err_not_found">Not found on the server. The file may have been moved or deleted.</string>
+    <string name="err_http">Server error (HTTP %1$d)</string>
+    <string name="err_bad_file">The file is corrupt or not a valid book.</string>
 </resources>

@@ -66,7 +66,7 @@
             android:layout_gravity="center"
             android:gravity="center"
             android:lineSpacingExtra="6dp"
-            android:text="书库还是空的\n\n按 OK 键添加数据源\n支持自动扫描局域网里的 alist / SMB"
+            android:text="@string/empty_hint"
             android:textColor="?android:attr/textColorSecondary"
             android:textSize="18sp"
             android:visibility="gone" />

@@ -211,11 +211,11 @@ public class ComicActivity extends AppCompatActivity {
     // OK/菜单键呼出的阅读菜单
     private void showReaderMenu() {
         String[] items = {
-                "目录",
-                "跳转到页",
-                "阅读方向: " + (rtl ? "右→左 (日漫)" : "左→右"),
-                "单页模式: " + (single ? "开" : "关"),
-                "切换为小说模式",
+                getString(R.string.menu_toc),
+                getString(R.string.menu_jump),
+                getString(R.string.menu_direction, getString(rtl ? R.string.dir_rtl : R.string.dir_ltr)),
+                getString(R.string.menu_single, getString(single ? R.string.on : R.string.off)),
+                getString(R.string.menu_to_novel),
         };
         new AlertDialog.Builder(this)
                 .setItems(items, (dialog, which) -> {
@@ -227,7 +227,7 @@ public class ComicActivity extends AppCompatActivity {
                     } else if (which == 2) {
                         rtl = !rtl;
                         db.set_rtl(resource_id, book_uri, rtl);
-                        Toast.makeText(this, rtl ? "已切到 右→左 (日漫)" : "已切到 左→右", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(this, rtl ? R.string.switched_rtl : R.string.switched_ltr, Toast.LENGTH_SHORT).show();
                         notifyPageChanged();
                     } else if (which == 3) {
                         single = !single;
@@ -256,7 +256,7 @@ public class ComicActivity extends AppCompatActivity {
     private void showTocDialog() {
         var toc = epub_book.toc();
         if (toc.isEmpty()) {
-            Toast.makeText(this, "本书没有目录", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.no_toc, Toast.LENGTH_SHORT).show();
             return;
         }
         var titles = new String[toc.size()];
@@ -268,7 +268,7 @@ public class ComicActivity extends AppCompatActivity {
             }
         }
         new AlertDialog.Builder(this)
-                .setTitle("目录")
+                .setTitle(R.string.menu_toc)
                 .setSingleChoiceItems(titles, current, (dialog, which) -> {
                     epub_book_page = toc.get(which).page;
                     notifyPageChanged();
@@ -301,13 +301,13 @@ public class ComicActivity extends AppCompatActivity {
         bar.setProgress(epub_book_page);
         label.setText(getString(R.string.page, epub_book_page + 1, total));
         new AlertDialog.Builder(this)
-                .setTitle("跳转到页")
+                .setTitle(R.string.menu_jump)
                 .setView(view)
-                .setPositiveButton("跳转", (dialog, which) -> {
+                .setPositiveButton(R.string.jump, (dialog, which) -> {
                     epub_book_page = bar.getProgress();
                     notifyPageChanged();
                 })
-                .setNegativeButton("取消", null)
+                .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
@@ -395,7 +395,7 @@ public class ComicActivity extends AppCompatActivity {
                         // pdf 整本下载到缓存后按页渲染 (PdfRenderer 只认本地文件)
                         epub_book = PdfBook.open(client.to_json(), book_uri, client, getCacheDir(),
                                 done -> handler.post(() -> progressMessageTextView.setText(
-                                        "正在下载 PDF " + fmt.format(done / 1048576.0) + " MB")));
+                                        getString(R.string.pdf_downloading, fmt.format(done / 1048576.0)))));
                     } else {
                         // 有持久化索引时 0 次网络往返完成开书
                         epub_book = LazyEpub.open(client.to_json(), book_uri, client, db);
@@ -415,7 +415,9 @@ public class ComicActivity extends AppCompatActivity {
                             return;
                         }
                         progressDialog.dismiss();
-                        Toast.makeText(ComicActivity.this, "打开 epub 失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+                        Toast.makeText(ComicActivity.this,
+                                getString(R.string.open_book_failed, Errors.describe(ComicActivity.this, e)),
+                                Toast.LENGTH_LONG).show();
                         finish();
                     });
                 }

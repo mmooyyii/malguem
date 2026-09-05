@@ -1,5 +1,8 @@
 ## malguem
-在Android TV上看 epub / pdf 格式的漫画和小说的app, 让所有的操作都能通过遥控器完成.
+
+[English](README.en.md)
+
+在Android TV上看 epub / pdf 格式的漫画和小说的app, 让所有的操作都能通过遥控器完成. 界面支持中文/英文 (跟随系统语言).
 
 支持四种数据源: WebDAV / SMB / OPDS 书库 (Komga、Kavita、Calibre-Web 等自建书库) / 本地硬盘.
 添加数据源时可以自动扫描局域网里的 alist(5244) / SMB(445) 服务, 不用对着遥控器敲 IP.

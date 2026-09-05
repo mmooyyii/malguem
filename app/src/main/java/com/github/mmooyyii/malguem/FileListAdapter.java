@@ -145,8 +145,9 @@ public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
         }
 
         h.caption.setText(display);
-        var type = item.view_type == ListItem.ViewType.Novel ? "小说" : "漫画";
-        var status = item.total_page == 0 ? "未读" : (item.read_to_page + 1) + " / " + item.total_page;
+        var type = context.getString(item.view_type == ListItem.ViewType.Novel ? R.string.novel_label : R.string.comic_label);
+        var status = item.total_page == 0 ? context.getString(R.string.unread)
+                : (item.read_to_page + 1) + " / " + item.total_page;
         h.sub.setText(type + " · " + status);
         h.sub.setVisibility(View.VISIBLE);
 

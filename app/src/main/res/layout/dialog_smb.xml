@@ -11,7 +11,7 @@
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:text="服务器地址"
+        android:text="@string/label_host"
         style="@style/Text.DialogLabel" />
 
     <EditText
@@ -27,7 +27,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="共享名"
+        android:text="@string/label_share"
         style="@style/Text.DialogLabel" />
 
     <EditText
@@ -43,7 +43,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="用户名"
+        android:text="@string/label_username"
         style="@style/Text.DialogLabel" />
 
     <EditText
@@ -58,7 +58,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
-        android:text="密码"
+        android:text="@string/label_password"
         style="@style/Text.DialogLabel" />
 
     <EditText

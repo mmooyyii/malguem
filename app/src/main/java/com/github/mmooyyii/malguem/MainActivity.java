@@ -87,7 +87,7 @@ public class MainActivity extends AppCompatActivity {
                 client = db.get_resource(file.id);
                 current_resource_id = file.id;
                 if (client == null) {
-                    android.widget.Toast.makeText(MainActivity.this, "数据库异常", Toast.LENGTH_SHORT).show();
+                    android.widget.Toast.makeText(MainActivity.this, R.string.db_error, Toast.LENGTH_SHORT).show();
                 } else {
                     new FetchFileListTask().executeTask();
                 }
@@ -119,7 +119,7 @@ public class MainActivity extends AppCompatActivity {
                 var db = Database.getInstance(this).getDatabase();
                 var c = db.get_resource(file.id);
                 if (c == null) {
-                    Toast.makeText(MainActivity.this, "数据源已被删除", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, R.string.source_gone, Toast.LENGTH_SHORT).show();
                     break;
                 }
                 Intent intent;
@@ -142,19 +142,19 @@ public class MainActivity extends AppCompatActivity {
         AlertDialog.Builder builder = new AlertDialog.Builder(this);
 
         // 设置对话框标题
-        builder.setTitle("确认删除");
+        builder.setTitle(R.string.confirm_delete);
 
         // 设置确认按钮及其点击事件
-        builder.setPositiveButton("删除", (dialog, which) -> {
+        builder.setPositiveButton(R.string.delete, (dialog, which) -> {
             // 处理删除操作，这里简单地显示一个 Toast 消息
             var db = Database.getInstance(MainActivity.this).getDatabase();
             db.delete_resource(id);
-            Toast.makeText(MainActivity.this, "删除成功", Toast.LENGTH_SHORT).show();
+            Toast.makeText(MainActivity.this, R.string.delete_ok, Toast.LENGTH_SHORT).show();
             dialog.dismiss(); // 关闭对话框
             init_resource_list();
         });
         // 设置取消按钮及其点击事件
-        builder.setNegativeButton("取消", (dialog, which) -> {
+        builder.setNegativeButton(R.string.cancel, (dialog, which) -> {
             // 取消操作，关闭对话框
             dialog.dismiss();
         });
@@ -166,9 +166,10 @@ public class MainActivity extends AppCompatActivity {
 
     // 新增数据源: 先选类型, 再进对应配置弹窗
     private void showAddChooser() {
-        String[] types = {"扫描局域网 (alist/SMB)", "WebDAV", "SMB", "OPDS 书库 (Komga/Kavita/Calibre-Web)", "本地硬盘"};
+        String[] types = {getString(R.string.source_scan), "WebDAV", "SMB",
+                getString(R.string.source_opds), getString(R.string.source_local)};
         new AlertDialog.Builder(this)
-                .setTitle("选择数据源类型")
+                .setTitle(R.string.choose_source_type)
                 .setItems(types, (dialog, which) -> {
                     if (which == 0) {
                         startLanScan();
@@ -201,9 +202,9 @@ public class MainActivity extends AppCompatActivity {
             etPassword.setText(pass);
         }
         new AlertDialog.Builder(this)
-                .setTitle(editId == null ? "添加 OPDS 书库" : "编辑 OPDS 书库")
+                .setTitle(editId == null ? R.string.add_opds : R.string.edit_opds)
                 .setView(dialogView)
-                .setPositiveButton(editId == null ? "添加" : "保存", (dialog, which) -> {
+                .setPositiveButton(getString(editId == null ? R.string.ok_add : R.string.ok_save), (dialog, which) -> {
                     String username = etUsername.getText().toString();
                     String password = etPassword.getText().toString();
                     String u = etUrl.getText().toString().trim();
@@ -214,10 +215,10 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         db.update_resource(editId, u, 4, r.to_json());
                     }
-                    Toast.makeText(MainActivity.this, editId == null ? "添加成功" : "已保存", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, editId == null ? R.string.add_ok : R.string.save_ok, Toast.LENGTH_SHORT).show();
                     init_resource_list();
                 })
-                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
                 .show();
     }
 
@@ -225,14 +226,14 @@ public class MainActivity extends AppCompatActivity {
     private void startLanScan() {
         var ip = LanScanner.localIp();
         if (ip == null) {
-            Toast.makeText(this, "没找到局域网 IP, 请检查网络", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.no_lan_ip, Toast.LENGTH_SHORT).show();
             return;
         }
         var subnet = ip.substring(0, ip.lastIndexOf('.'));
         var progress = new AlertDialog.Builder(this)
-                .setTitle("扫描局域网")
-                .setMessage("正在扫描 " + subnet + ".1-254 的 5244(alist) / 445(SMB) 端口…")
-                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                .setTitle(R.string.scan_lan_title)
+                .setMessage(getString(R.string.scanning, subnet))
+                .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
                 .create();
         progress.show();
         new Thread(() -> {
@@ -249,7 +250,7 @@ public class MainActivity extends AppCompatActivity {
 
     private void showScanResults(List<LanScanner.Hit> hits) {
         if (hits.isEmpty()) {
-            Toast.makeText(this, "没有扫到 alist / SMB 服务", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.scan_empty, Toast.LENGTH_SHORT).show();
             return;
         }
         var labels = new String[hits.size()];
@@ -258,7 +259,7 @@ public class MainActivity extends AppCompatActivity {
             labels[i] = h.ip + (h.port == LanScanner.PORT_ALIST ? "  ·  alist (WebDAV)" : "  ·  SMB");
         }
         new AlertDialog.Builder(this)
-                .setTitle("发现的服务")
+                .setTitle(R.string.scan_found)
                 .setItems(labels, (dialog, which) -> {
                     var h = hits.get(which);
                     if (h.port == LanScanner.PORT_ALIST) {
@@ -268,7 +269,7 @@ public class MainActivity extends AppCompatActivity {
                         showSmbDialog(h.ip, null, null, null, null, null);
                     }
                 })
-                .setNegativeButton("取消", null)
+                .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
@@ -288,9 +289,9 @@ public class MainActivity extends AppCompatActivity {
             etPassword.setText(pass);
         }
         new AlertDialog.Builder(this)
-                .setTitle(editId == null ? "添加 WebDAV" : "编辑 WebDAV")
+                .setTitle(editId == null ? R.string.add_webdav : R.string.edit_webdav)
                 .setView(dialogView)
-                .setPositiveButton(editId == null ? "添加" : "保存", (dialog, which) -> {
+                .setPositiveButton(getString(editId == null ? R.string.ok_add : R.string.ok_save), (dialog, which) -> {
                     String username = etUsername.getText().toString();
                     String password = etPassword.getText().toString();
                     String u = etUrl.getText().toString();
@@ -301,10 +302,10 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         db.update_resource(editId, u, 1, r.to_json());
                     }
-                    Toast.makeText(MainActivity.this, editId == null ? "添加成功" : "已保存", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, editId == null ? R.string.add_ok : R.string.save_ok, Toast.LENGTH_SHORT).show();
                     init_resource_list();
                 })
-                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
                 .show();
     }
 
@@ -329,9 +330,9 @@ public class MainActivity extends AppCompatActivity {
         // 弹窗里不放 domain 输入, 编辑时原样保留
         final String keepDomain = domain == null ? "" : domain;
         new AlertDialog.Builder(this)
-                .setTitle(editId == null ? "添加 SMB" : "编辑 SMB")
+                .setTitle(editId == null ? R.string.add_smb : R.string.edit_smb)
                 .setView(dialogView)
-                .setPositiveButton(editId == null ? "添加" : "保存", (dialog, which) -> {
+                .setPositiveButton(getString(editId == null ? R.string.ok_add : R.string.ok_save), (dialog, which) -> {
                     String h = etHost.getText().toString().trim();
                     String s = etShare.getText().toString().trim();
                     String u = etUsername.getText().toString();
@@ -343,10 +344,10 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         db.update_resource(editId, "smb://" + h + "/" + s, 2, r.to_json());
                     }
-                    Toast.makeText(MainActivity.this, editId == null ? "添加成功" : "已保存", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, editId == null ? R.string.add_ok : R.string.save_ok, Toast.LENGTH_SHORT).show();
                     init_resource_list();
                 })
-                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
                 .show();
     }
 
@@ -358,9 +359,9 @@ public class MainActivity extends AppCompatActivity {
             etPath.setText(path);
         }
         new AlertDialog.Builder(this)
-                .setTitle(editId == null ? "添加本地目录" : "编辑本地目录")
+                .setTitle(editId == null ? R.string.add_local : R.string.edit_local)
                 .setView(dialogView)
-                .setPositiveButton(editId == null ? "添加" : "保存", (dialog, which) -> {
+                .setPositiveButton(getString(editId == null ? R.string.ok_add : R.string.ok_save), (dialog, which) -> {
                     String p = etPath.getText().toString().trim();
                     var r = new LocalResource(p);
                     var db = Database.getInstance(MainActivity.this).getDatabase();
@@ -369,10 +370,10 @@ public class MainActivity extends AppCompatActivity {
                     } else {
                         db.update_resource(editId, p, 3, r.to_json());
                     }
-                    Toast.makeText(MainActivity.this, editId == null ? "添加成功" : "已保存", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(MainActivity.this, editId == null ? R.string.add_ok : R.string.save_ok, Toast.LENGTH_SHORT).show();
                     init_resource_list();
                 })
-                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
                 .show();
     }
 
@@ -412,7 +413,7 @@ public class MainActivity extends AppCompatActivity {
         // 最近阅读放最前面 (一行 5 个), 点开即续读
         var list = new ArrayList<>(db.recent_books(5));
         list.addAll(db.resource_list());
-        list.add(new ListItem(0, "添加数据源", ListItem.FileType.AddWebDav));
+        list.add(new ListItem(0, getString(R.string.add_source), ListItem.FileType.AddWebDav));
         fileListAdapter.setClient(null);
         fileListAdapter.setItems(list);
         findViewById(R.id.listLoading).setVisibility(View.GONE);
@@ -504,14 +505,14 @@ public class MainActivity extends AppCompatActivity {
     private void showResourceMenu(ListItem item) {
         new AlertDialog.Builder(this)
                 .setTitle(item.name)
-                .setItems(new String[]{"编辑", "删除"}, (dialog, which) -> {
+                .setItems(new String[]{getString(R.string.edit), getString(R.string.delete)}, (dialog, which) -> {
                     if (which == 0) {
                         editResource(item.id);
                     } else {
                         showDeleteConfirmationDialog(item.id);
                     }
                 })
-                .setNegativeButton("取消", null)
+                .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
@@ -520,7 +521,7 @@ public class MainActivity extends AppCompatActivity {
         var db = Database.getInstance(this).getDatabase();
         var r = db.get_resource(id);
         if (r == null) {
-            Toast.makeText(this, "数据库异常", Toast.LENGTH_SHORT).show();
+            Toast.makeText(this, R.string.db_error, Toast.LENGTH_SHORT).show();
             return;
         }
         if (r instanceof OpdsResource) {
@@ -540,7 +541,7 @@ public class MainActivity extends AppCompatActivity {
     private void showRecentMenu(ListItem item) {
         new AlertDialog.Builder(this)
                 .setTitle(item.name)
-                .setItems(new String[]{"切换 漫画/小说", "从最近阅读移除"}, (dialog, which) -> {
+                .setItems(new String[]{getString(R.string.menu_switch_view), getString(R.string.menu_remove_recent)}, (dialog, which) -> {
                     var db = Database.getInstance(this).getDatabase();
                     if (which == 0) {
                         db.switch_view_type(item.id, item.uri);
@@ -549,7 +550,7 @@ public class MainActivity extends AppCompatActivity {
                     }
                     init_resource_list();
                 })
-                .setNegativeButton("取消", null)
+                .setNegativeButton(R.string.cancel, null)
                 .show();
     }
 
@@ -569,29 +570,27 @@ public class MainActivity extends AppCompatActivity {
         } catch (Exception e) {
             version = "?";
         }
-        String msg = "版本: " + version
-                + "\n\n按键说明:"
-                + "\n· 菜单键 / 长按OK — 书: 切换漫画/小说; 数据源: 编辑/删除; 最近阅读: 切换/移除"
-                + "\n· 设置键 — 删除聚焦那本书的索引与封面"
-                + "\n· 阅读中按OK — 目录 / 跳页 / 字号 / 夜间 / 阅读方向 / 单页"
-                + "\n\n缓存:"
-                + "\n封面 " + file_count(covers) + " 张, " + format_size(coverBytes)
-                + "\n索引 " + index[0] + " 本, " + format_size(index[1])
-                + "\nPDF " + file_count(books) + " 本, " + format_size(bookBytes)
-                + "\n更新包 " + format_size(updateBytes);
+        String msg = getString(R.string.help_version, version)
+                + "\n\n" + getString(R.string.help_keys)
+                + "\n\n" + getString(R.string.help_cache,
+                file_count(covers), format_size(coverBytes),
+                index[0], format_size(index[1]),
+                file_count(books), format_size(bookBytes),
+                format_size(updateBytes));
         new AlertDialog.Builder(this)
-                .setTitle("帮助")
+                .setTitle(R.string.help_title)
                 .setMessage(msg)
-                .setPositiveButton("检查更新", (dialog, which) -> updater.checkManually())
-                .setNeutralButton("清空缓存", (dialog, which) -> {
+                .setPositiveButton(R.string.check_update, (dialog, which) -> updater.checkManually())
+                .setNeutralButton(R.string.clear_cache, (dialog, which) -> {
                     CoverLoader.get(this).clearMemory();
                     delete_children(covers);
                     delete_children(updates);
                     delete_children(books);
                     db.clear_epub_index();
-                    Toast.makeText(this, "已清理 " + format_size(coverBytes + updateBytes + bookBytes + index[1]), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, getString(R.string.cleared,
+                            format_size(coverBytes + updateBytes + bookBytes + index[1])), Toast.LENGTH_SHORT).show();
                 })
-                .setNegativeButton("关闭", (dialog, which) -> dialog.dismiss())
+                .setNegativeButton(R.string.close, (dialog, which) -> dialog.dismiss())
                 .show();
     }
 
@@ -614,18 +613,18 @@ public class MainActivity extends AppCompatActivity {
         }
         new AlertDialog.Builder(this)
                 .setTitle(item.name)
-                .setItems(new String[]{"删除本书索引与封面缓存"}, (dialog, which) -> {
+                .setItems(new String[]{getString(R.string.book_delete_index)}, (dialog, which) -> {
                     var db = Database.getInstance(this).getDatabase();
                     db.delete_epub_index(ns, uri);
                     CoverLoader.get(this).removeCover(ns, uri);
-                    Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, R.string.deleted, Toast.LENGTH_SHORT).show();
                     if (at_root_list) {
                         init_resource_list();
                     } else {
                         new FetchFileListTask().executeTask();
                     }
                 })
-                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
                 .show();
     }
 
@@ -679,7 +678,7 @@ public class MainActivity extends AppCompatActivity {
                 System.exit(0);
             } else {
                 kill_app_countdown = now + 1000;
-                android.widget.Toast.makeText(MainActivity.this, "再按一次返回退出", Toast.LENGTH_SHORT).show();
+                android.widget.Toast.makeText(MainActivity.this, R.string.press_back_again, Toast.LENGTH_SHORT).show();
             }
         } else if (pwd.isEmpty()) {
             init_resource_list();
@@ -690,16 +689,16 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    // 目录拉取失败时给出重试入口, 不再只丢一个 toast 停在旧列表上
-    private void showListError() {
+    // 目录拉取失败时给出分类过的原因和重试入口, 不再只丢一个 toast 停在旧列表上
+    private void showListError(Exception e) {
         if (isDestroyed()) {
             return;
         }
         new AlertDialog.Builder(this)
-                .setTitle("目录加载失败")
-                .setMessage("网络或服务器出错了")
-                .setPositiveButton("重试", (dialog, which) -> new FetchFileListTask().executeTask())
-                .setNegativeButton("回首页", (dialog, which) -> {
+                .setTitle(R.string.list_error_title)
+                .setMessage(Errors.describe(this, e))
+                .setPositiveButton(R.string.retry, (dialog, which) -> new FetchFileListTask().executeTask())
+                .setNegativeButton(R.string.back_home, (dialog, which) -> {
                     pwd.clear();
                     init_resource_list();
                 })
@@ -722,7 +721,7 @@ public class MainActivity extends AppCompatActivity {
                     // 这里在后台线程, UI 操作必须切回主线程
                     handler.post(() -> {
                         findViewById(R.id.listLoading).setVisibility(View.GONE);
-                        showListError();
+                        showListError(e);
                     });
                     return;
                 }

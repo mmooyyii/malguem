@@ -87,7 +87,7 @@ public class AppUpdater {
 
     // 帮助对话框里的手动检查: 无论结果如何都给出反馈
     public void checkManually() {
-        Toast.makeText(activity, "正在检查更新…", Toast.LENGTH_SHORT).show();
+        Toast.makeText(activity, R.string.checking_update, Toast.LENGTH_SHORT).show();
         new Thread(() -> {
             var manifest = fetchManifest();
             var current = currentVersion();
@@ -96,9 +96,9 @@ public class AppUpdater {
                     return;
                 }
                 if (manifest == null) {
-                    Toast.makeText(activity, "检查更新失败, 所有源都不可用", Toast.LENGTH_LONG).show();
+                    Toast.makeText(activity, R.string.update_check_failed, Toast.LENGTH_LONG).show();
                 } else if (manifest.tag.equals(current)) {
-                    Toast.makeText(activity, "已是最新版本 " + current, Toast.LENGTH_SHORT).show();
+                    Toast.makeText(activity, activity.getString(R.string.already_latest, current), Toast.LENGTH_SHORT).show();
                 } else {
                     askAndDownload(manifest.tag, current);
                 }
@@ -142,16 +142,16 @@ public class AppUpdater {
             return;
         }
         new AlertDialog.Builder(activity)
-                .setTitle("发现新版本 " + latest)
-                .setMessage("当前版本 " + current + ", 是否下载更新?")
-                .setPositiveButton("更新", (d, w) -> download(latest))
-                .setNegativeButton("下次再说", (d, w) -> d.dismiss())
+                .setTitle(activity.getString(R.string.new_version, latest))
+                .setMessage(activity.getString(R.string.update_ask, current))
+                .setPositiveButton(R.string.update_now, (d, w) -> download(latest))
+                .setNegativeButton(R.string.update_later, (d, w) -> d.dismiss())
                 .show();
     }
 
     private void download(String tag) {
         var dialog = new AlertDialog.Builder(activity)
-                .setTitle("正在下载 " + tag)
+                .setTitle(activity.getString(R.string.downloading, tag))
                 .setMessage("0%")
                 .setCancelable(false)
                 .create();
@@ -174,7 +174,8 @@ public class AppUpdater {
                     return;
                 }
                 dialog.dismiss();
-                Toast.makeText(activity, "下载失败: " + (err == null ? "" : err.getMessage()), Toast.LENGTH_LONG).show();
+                Toast.makeText(activity, activity.getString(R.string.download_failed,
+                        err == null ? "" : Errors.describe(activity, err)), Toast.LENGTH_LONG).show();
             });
         }).start();
     }
@@ -240,12 +241,12 @@ public class AppUpdater {
         if (!activity.getPackageManager().canRequestPackageInstalls()) {
             // 首次更新需要用户授权"安装未知应用", 授权页返回后由 unknownSourceLauncher 回调继续
             new AlertDialog.Builder(activity)
-                    .setTitle("需要安装权限")
-                    .setMessage("首次更新需要允许本应用安装未知应用, 授权后会自动继续安装")
-                    .setPositiveButton("去授权", (d, w) -> unknownSourceLauncher.launch(
+                    .setTitle(R.string.install_perm_title)
+                    .setMessage(R.string.install_perm_msg)
+                    .setPositiveButton(R.string.grant, (d, w) -> unknownSourceLauncher.launch(
                             new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                                     Uri.parse("package:" + activity.getPackageName()))))
-                    .setNegativeButton("取消", (d, w) -> d.dismiss())
+                    .setNegativeButton(R.string.cancel, (d, w) -> d.dismiss())
                     .show();
             return;
         }
