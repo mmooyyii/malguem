@@ -36,12 +36,13 @@ public class Database {
 
         // 数据库名称和版本
         private static final String DATABASE_NAME = "malguem.db";
-        private static final int DATABASE_VERSION = 3;
+        private static final int DATABASE_VERSION = 4;
 
         // 创建表的 SQL 语句
         private static final String RESOURCE_TABLE = "CREATE TABLE resource (id INTEGER PRIMARY KEY, name TEXT NOT NULL, resource_type INTEGER NOT NULL, json_info TEXT NOT NULL);";
 
-        private static final String EPUB_TABLE = "CREATE TABLE epub (resource_id INTEGER NOT NULL,path TEXT NOT NULL, total_page INTEGER NOT NULL default 0, current_page INTEGER NOT NULL default 0, page_offset INTEGER NOT NULL default 0, view_type INTEGER NOT NULL default 0, PRIMARY KEY (resource_id, path));";
+        // rtl: 漫画从右到左阅读(日漫), 按书保存; last_read: 最近一次阅读的毫秒时间戳, 首页"最近阅读"按它排序
+        private static final String EPUB_TABLE = "CREATE TABLE epub (resource_id INTEGER NOT NULL,path TEXT NOT NULL, total_page INTEGER NOT NULL default 0, current_page INTEGER NOT NULL default 0, page_offset INTEGER NOT NULL default 0, view_type INTEGER NOT NULL default 0, rtl INTEGER NOT NULL default 0, last_read INTEGER NOT NULL default 0, PRIMARY KEY (resource_id, path));";
 
         // epub 索引缓存: 中央目录 + opf 解析结果, 免掉开书/加载封面时的元数据网络往返.
         // namespace 是数据源配置的 json(区分不同服务器/账号), path 是包内路径, 一起做主键; 不做内容失效
@@ -73,6 +74,11 @@ public class Database {
             if (oldVersion < 3) {
                 // v3 新增 epub 索引表, 保留既有数据
                 db.execSQL(EPUB_INDEX_TABLE);
+            }
+            if (oldVersion < 4) {
+                // v4 新增 漫画阅读方向 与 最近阅读时间, 保留既有数据
+                db.execSQL("ALTER TABLE epub ADD COLUMN rtl INTEGER NOT NULL default 0");
+                db.execSQL("ALTER TABLE epub ADD COLUMN last_read INTEGER NOT NULL default 0");
             }
         }
 
@@ -110,6 +116,44 @@ public class Database {
             values.put("current_page", current_page);
             values.put("page_offset", page_offset);
             values.put("total_page", total_page);
+            values.put("last_read", System.currentTimeMillis());
+            cur.update("epub", values, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path});
+        }
+
+        // 首页"最近阅读": 按 last_read 倒序取最近读过的书, 联表带出数据源配置
+        public List<ListItem> recent_books(int limit) {
+            var db = getReadableDatabase();
+            var cursor = db.rawQuery(
+                    "select e.resource_id, e.path, e.total_page, e.current_page, e.view_type, r.json_info"
+                            + " from epub e join resource r on r.id = e.resource_id"
+                            + " where e.last_read > 0 order by e.last_read desc limit ?",
+                    new String[]{String.valueOf(limit)});
+            var list = new ArrayList<ListItem>();
+            while (cursor.moveToNext()) {
+                var path = cursor.getString(1);
+                var name = path.substring(path.lastIndexOf('/') + 1);
+                var item = new ListItem(cursor.getInt(0), name, ListItem.FileType.RecentEpub);
+                item.uri = path;
+                item.total_page = cursor.getInt(2);
+                item.read_to_page = cursor.getInt(3);
+                item.view_type = cursor.getInt(4) == 0 ? ListItem.ViewType.Comic : ListItem.ViewType.Novel;
+                try {
+                    // 统一走 from_json→to_json 的往返结果做 namespace, 与封面/索引处保持同一个 key
+                    item.ns = ResourceInterface.from_json(cursor.getString(5)).to_json();
+                } catch (Exception e) {
+                    continue;
+                }
+                list.add(item);
+            }
+            cursor.close();
+            return list;
+        }
+
+        public void set_rtl(int resource_id, String path, boolean rtl) {
+            init_epub(resource_id, path);
+            var cur = getWritableDatabase();
+            ContentValues values = new ContentValues();
+            values.put("rtl", rtl ? 1 : 0);
             cur.update("epub", values, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path});
         }
 
@@ -135,10 +179,11 @@ public class Database {
         public ReadHistory get_epub_info(int resource_id, String path) {
             var output = new ReadHistory();
             var db = getReadableDatabase();
-            var cursor = db.query("epub", new String[]{"current_page", "page_offset", "view_type"}, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path}, null, null, null);
+            var cursor = db.query("epub", new String[]{"current_page", "page_offset", "view_type", "rtl"}, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path}, null, null, null);
             if (cursor.moveToNext()) {
                 output.current_page = cursor.getInt(cursor.getColumnIndexOrThrow("current_page"));
                 output.page_offset = cursor.getInt(cursor.getColumnIndexOrThrow("page_offset"));
+                output.rtl = cursor.getInt(cursor.getColumnIndexOrThrow("rtl")) == 1;
                 var type = cursor.getInt(cursor.getColumnIndexOrThrow("view_type"));
                 if (type == 0) {
                     output.view_type = ListItem.ViewType.Comic;

@@ -1,6 +1,5 @@
 package com.github.mmooyyii.malguem;
 
-import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -54,7 +53,12 @@ public class MainActivity extends AppCompatActivity {
         launcher = registerForActivityResult(
                 new ActivityResultContracts.StartActivityForResult(),
                 result -> {
-                    new FetchFileListTask().executeTask();
+                    // 从首页"最近阅读"直接开书时没有进入任何目录, 返回后刷新首页而不是去 ls (此时 client 可能为 null)
+                    if (at_root_list) {
+                        init_resource_list();
+                    } else {
+                        new FetchFileListTask().executeTask();
+                    }
                 });
         updater = new AppUpdater(this);
         updater.checkOnLaunch();
@@ -111,6 +115,26 @@ public class MainActivity extends AppCompatActivity {
                 launcher.launch(intent);
                 break;
             }
+            case RecentEpub: {
+                // 首页"最近阅读"直接开书, 数据源配置从库里取, 不经过目录浏览
+                var db = Database.getInstance(this).getDatabase();
+                var c = db.get_resource(file.id);
+                if (c == null) {
+                    Toast.makeText(MainActivity.this, "数据源已被删除", Toast.LENGTH_SHORT).show();
+                    break;
+                }
+                Intent intent;
+                if (file.view_type == ListItem.ViewType.Comic) {
+                    intent = new Intent(MainActivity.this, ComicActivity.class);
+                } else {
+                    intent = new Intent(MainActivity.this, NovelActivity.class);
+                }
+                intent.putExtra("resource_id", file.id);
+                intent.putExtra("book_uri", file.uri);
+                intent.putExtra("client", c.to_json());
+                launcher.launch(intent);
+                break;
+            }
         }
     }
 
@@ -158,15 +182,11 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    @SuppressLint("SetTextI18n")
     private void showWebdavDialog() {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_login, null);
         final EditText etUsername = dialogView.findViewById(R.id.et_username);
         final EditText etPassword = dialogView.findViewById(R.id.et_password);
         final EditText etUrl = dialogView.findViewById(R.id.et_url);
-        etUrl.setText("http://192.168.31.241:5244/dav/kuake");
-        etUsername.setText("admin");
-        etPassword.setText("a123456");
         new AlertDialog.Builder(this)
                 .setTitle("添加 WebDAV")
                 .setView(dialogView)
@@ -250,8 +270,10 @@ public class MainActivity extends AppCompatActivity {
     public void init_resource_list() {
         at_root_list = true;
         var db = Database.getInstance(this).getDatabase();
-        var list = new ArrayList<ListItem>(db.resource_list());
-        list.add(new ListItem(0, "新增webdav", ListItem.FileType.AddWebDav));
+        // 最近阅读放最前面 (一行 5 个), 点开即续读
+        var list = new ArrayList<>(db.recent_books(5));
+        list.addAll(db.resource_list());
+        list.add(new ListItem(0, "添加数据源", ListItem.FileType.AddWebDav));
         fileListAdapter.setClient(null);
         fileListAdapter.setItems(list);
     }
@@ -312,6 +334,12 @@ public class MainActivity extends AppCompatActivity {
             new FetchFileListTask().executeTask();
             return true;
         }
+        if (item.type == ListItem.FileType.RecentEpub) {
+            var db = Database.getInstance(this).getDatabase();
+            db.switch_view_type(item.id, item.uri);
+            init_resource_list();
+            return true;
+        }
         return false;
     }
 
@@ -342,15 +370,21 @@ public class MainActivity extends AppCompatActivity {
 
     // config 键: 删除当前聚焦那本书的索引与封面缓存 (换源/文件被替换后手动重建用)
     private void showBookConfigDialog() {
-        if (client == null) {
-            return;
-        }
         var item = focusedItem();
-        if (item == null || item.type != ListItem.FileType.Epub) {
+        if (item == null) {
             return;
         }
-        final var uri = item.uri != null ? item.uri : make_uri(item.name);
-        final var ns = client.to_json();
+        final String ns;
+        final String uri;
+        if (item.type == ListItem.FileType.Epub && client != null) {
+            ns = client.to_json();
+            uri = item.uri != null ? item.uri : make_uri(item.name);
+        } else if (item.type == ListItem.FileType.RecentEpub) {
+            ns = item.ns;
+            uri = item.uri;
+        } else {
+            return;
+        }
         new AlertDialog.Builder(this)
                 .setTitle(item.name)
                 .setItems(new String[]{"删除本书索引与封面缓存"}, (dialog, which) -> {
@@ -358,7 +392,11 @@ public class MainActivity extends AppCompatActivity {
                     db.delete_epub_index(ns, uri);
                     CoverLoader.get(this).removeCover(ns, uri);
                     Toast.makeText(this, "已删除", Toast.LENGTH_SHORT).show();
-                    new FetchFileListTask().executeTask();
+                    if (at_root_list) {
+                        init_resource_list();
+                    } else {
+                        new FetchFileListTask().executeTask();
+                    }
                 })
                 .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
                 .show();

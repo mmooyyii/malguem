@@ -91,6 +91,7 @@ public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
 
         switch (item.type) {
             case Epub:
+            case RecentEpub:
                 bindEpub(h, item, display);
                 break;
             case Dir:
@@ -143,10 +144,12 @@ public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
         h.sub.setText(type + " · " + status);
         h.sub.setVisibility(View.VISIBLE);
 
-        // 真实封面 (异步加载, 成功后盖在兜底书封之上)
+        // 真实封面 (异步加载, 成功后盖在兜底书封之上); RecentEpub 自带 namespace, 其余用当前浏览的数据源
         var uri = item.uri != null ? item.uri : item.name;
-        if (client != null && uri != null) {
-            coverLoader.load(namespace, uri, client, h.coverImage);
+        var ns = item.ns != null ? item.ns : namespace;
+        var c = item.ns != null ? ResourceInterface.from_json(item.ns) : client;
+        if (c != null && uri != null) {
+            coverLoader.load(ns, uri, c, h.coverImage);
         }
     }
 
