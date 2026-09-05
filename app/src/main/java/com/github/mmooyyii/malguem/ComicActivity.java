@@ -12,6 +12,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -40,6 +41,7 @@ public class ComicActivity extends AppCompatActivity {
     Book epub_book;
     int epub_book_page;
     int resource_id;
+    boolean rtl; // 从右到左阅读(日漫): 先读右栏再读左栏, 左键前进; 按书存在 epub 表
 
     String book_uri;
 
@@ -64,15 +66,19 @@ public class ComicActivity extends AppCompatActivity {
         webSettings.setAllowFileAccess(true);
         webSettings.setAllowContentAccess(true);
         webSettings.setUseWideViewPort(true);
-        // 左栏向下滚到底 -> 焦点切到右栏 (canScrollVertically 比 contentHeight*scale 的算术判断可靠)
+        // 先读栏滚到底 -> 焦点切到后读栏; 后读栏滚回顶 -> 焦点切回先读栏 (rtl 时先读栏是右栏)
+        // (canScrollVertically 比 contentHeight*scale 的算术判断可靠)
         ComicViewLeft.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
-            if (scrollY > oldScrollY && !v.canScrollVertically(1)) {
+            if (!rtl && scrollY > oldScrollY && !v.canScrollVertically(1)) {
+                ComicViewRight.requestFocus();
+            } else if (rtl && scrollY < oldScrollY && !v.canScrollVertically(-1)) {
                 ComicViewRight.requestFocus();
             }
         });
-        // 右栏向上滚到顶 -> 焦点切回左栏
         ComicViewRight.setOnScrollChangeListener((v, scrollX, scrollY, oldScrollX, oldScrollY) -> {
-            if (scrollY < oldScrollY && !v.canScrollVertically(-1)) {
+            if (!rtl && scrollY < oldScrollY && !v.canScrollVertically(-1)) {
+                ComicViewLeft.requestFocus();
+            } else if (rtl && scrollY > oldScrollY && !v.canScrollVertically(1)) {
                 ComicViewLeft.requestFocus();
             }
         });
@@ -168,19 +174,103 @@ public class ComicActivity extends AppCompatActivity {
         }
         int keyCode = event.getKeyCode();
         int action = event.getAction();
-        boolean page_changed = false;
-        if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-            epub_book_page = Math.max(0, epub_book_page - 2);
-            page_changed = true;
-        } else if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-            epub_book_page = Math.max(0, Math.min(epub_book.total_pages() - 2, epub_book_page + 2));
-            page_changed = true;
+        if (action == KeyEvent.ACTION_DOWN
+                && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
+                || keyCode == KeyEvent.KEYCODE_MENU)) {
+            showReaderMenu();
+            return true;
         }
-        if (page_changed) {
+        if (action == KeyEvent.ACTION_DOWN
+                && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
+            // rtl 时页序从右往左, 左键是前进
+            boolean forward = (keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) != rtl;
+            if (forward) {
+                epub_book_page = Math.max(0, Math.min(epub_book.total_pages() - 2, epub_book_page + 2));
+            } else {
+                epub_book_page = Math.max(0, epub_book_page - 2);
+            }
             notifyPageChanged();
             return true;
         }
         return super.dispatchKeyEvent(event);
+    }
+
+    // OK/菜单键呼出的阅读菜单
+    private void showReaderMenu() {
+        String[] items = {"目录", "跳转到页", "阅读方向: " + (rtl ? "右→左 (日漫)" : "左→右")};
+        new AlertDialog.Builder(this)
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) {
+                        showTocDialog();
+                    } else if (which == 1) {
+                        showJumpDialog();
+                    } else {
+                        rtl = !rtl;
+                        var db = Database.getInstance(this).getDatabase();
+                        db.set_rtl(resource_id, book_uri, rtl);
+                        Toast.makeText(this, rtl ? "已切到 右→左 (日漫)" : "已切到 左→右", Toast.LENGTH_SHORT).show();
+                        notifyPageChanged();
+                    }
+                })
+                .show();
+    }
+
+    private void showTocDialog() {
+        var toc = epub_book.toc();
+        if (toc.isEmpty()) {
+            Toast.makeText(this, "本书没有目录", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        var titles = new String[toc.size()];
+        int current = 0;
+        for (int i = 0; i < toc.size(); i++) {
+            titles[i] = toc.get(i).title;
+            if (toc.get(i).page <= epub_book_page) {
+                current = i;
+            }
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("目录")
+                .setSingleChoiceItems(titles, current, (dialog, which) -> {
+                    epub_book_page = toc.get(which).page;
+                    notifyPageChanged();
+                    dialog.dismiss();
+                })
+                .show();
+    }
+
+    private void showJumpDialog() {
+        var view = LayoutInflater.from(this).inflate(R.layout.dialog_seek, null);
+        TextView label = view.findViewById(R.id.seek_label);
+        SeekBar bar = view.findViewById(R.id.seek_bar);
+        final int total = epub_book.total_pages();
+        bar.setMax(Math.max(0, total - 1));
+        bar.setKeyProgressIncrement(Math.max(1, total / 100));
+        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                label.setText(getString(R.string.page, progress + 1, total));
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
+        });
+        bar.setProgress(epub_book_page);
+        label.setText(getString(R.string.page, epub_book_page + 1, total));
+        new AlertDialog.Builder(this)
+                .setTitle("跳转到页")
+                .setView(view)
+                .setPositiveButton("跳转", (dialog, which) -> {
+                    epub_book_page = bar.getProgress();
+                    notifyPageChanged();
+                })
+                .setNegativeButton("取消", null)
+                .show();
     }
 
     private void notifyPageChanged() {
@@ -193,21 +283,25 @@ public class ComicActivity extends AppCompatActivity {
                 epub_book.prepare(leftPage, Math.min(rightPage + 1, total));
             } catch (Exception ignore) {
             }
-            final String leftHtml = leftPage < total ? epub_book.page(leftPage) : null;
-            final String rightHtml = rightPage < total ? epub_book.page(rightPage) : null;
+            final String firstHtml = leftPage < total ? epub_book.page(leftPage) : null;
+            final String secondHtml = rightPage < total ? epub_book.page(rightPage) : null;
             runOnUiThread(() -> {
                 if (isDestroyed()) {
                     return;
                 }
-                if (leftHtml != null) {
-                    show_new_page(ComicViewLeft, leftHtml);
+                // 阅读顺序里的第一页: 常规放左栏, rtl(日漫) 放右栏
+                var firstView = rtl ? ComicViewRight : ComicViewLeft;
+                var secondView = rtl ? ComicViewLeft : ComicViewRight;
+                if (firstHtml != null) {
+                    show_new_page(firstView, firstHtml);
                 }
-                if (rightHtml != null) {
-                    show_new_page(ComicViewRight, rightHtml);
+                if (secondHtml != null) {
+                    show_new_page(secondView, secondHtml);
                 } else {
-                    // 奇数页时最后一屏右侧无内容, 清空避免残留上一页
-                    ComicViewRight.loadDataWithBaseURL(null, "", "text/html", "UTF-8", null);
+                    // 末尾凑不满一屏两页时, 后读栏清空避免残留上一页
+                    secondView.loadDataWithBaseURL(null, "", "text/html", "UTF-8", null);
                 }
+                firstView.requestFocus();
                 pageView.setText(getString(R.string.page, leftPage + 1, total));
                 try {
                     // 漫画一页一张大图, 预取窗口放大到 8 页; 已缓存的页在 prepare 里会被跳过
@@ -273,7 +367,9 @@ public class ComicActivity extends AppCompatActivity {
 
         private void LoadReadHistory() {
             var db = Database.getInstance(ComicActivity.this).getDatabase();
-            epub_book_page = db.get_epub_info(resource_id, book_uri).current_page;
+            var info = db.get_epub_info(resource_id, book_uri);
+            epub_book_page = info.current_page;
+            rtl = info.rtl;
         }
     }
 }

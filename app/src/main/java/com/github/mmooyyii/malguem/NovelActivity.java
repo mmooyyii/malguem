@@ -12,6 +12,7 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -56,6 +57,7 @@ public class NovelActivity extends AppCompatActivity {
         webSettings.setAllowContentAccess(true);
         webSettings.setUseWideViewPort(false);
         webSettings.setJavaScriptEnabled(true);
+        webSettings.setTextZoom(getSharedPreferences("settings", MODE_PRIVATE).getInt("novel_text_zoom", 100));
         novelView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
 
         var intent = getIntent();
@@ -161,6 +163,12 @@ public class NovelActivity extends AppCompatActivity {
         }
         int keyCode = event.getKeyCode();
         int action = event.getAction();
+        if (action == KeyEvent.ACTION_DOWN
+                && (keyCode == KeyEvent.KEYCODE_DPAD_CENTER || keyCode == KeyEvent.KEYCODE_ENTER
+                || keyCode == KeyEvent.KEYCODE_MENU)) {
+            showReaderMenu();
+            return true;
+        }
         boolean page_changed = false;
         if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
             page_changed = true;
@@ -174,6 +182,104 @@ public class NovelActivity extends AppCompatActivity {
             return true;
         }
         return super.dispatchKeyEvent(event);
+    }
+
+    // OK/菜单键呼出的阅读菜单
+    private void showReaderMenu() {
+        String[] items = {"目录", "跳转到页", "字号"};
+        new AlertDialog.Builder(this)
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) {
+                        showTocDialog();
+                    } else if (which == 1) {
+                        showJumpDialog();
+                    } else {
+                        showZoomDialog();
+                    }
+                })
+                .show();
+    }
+
+    private void showTocDialog() {
+        var toc = epub_book.toc();
+        if (toc.isEmpty()) {
+            Toast.makeText(this, "本书没有目录", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        var titles = new String[toc.size()];
+        int current = 0;
+        for (int i = 0; i < toc.size(); i++) {
+            titles[i] = toc.get(i).title;
+            if (toc.get(i).page <= epub_book_page) {
+                current = i;
+            }
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("目录")
+                .setSingleChoiceItems(titles, current, (dialog, which) -> {
+                    epub_book_page = toc.get(which).page;
+                    notifyPageChanged(0);
+                    dialog.dismiss();
+                })
+                .show();
+    }
+
+    private void showJumpDialog() {
+        var view = LayoutInflater.from(this).inflate(R.layout.dialog_seek, null);
+        TextView label = view.findViewById(R.id.seek_label);
+        SeekBar bar = view.findViewById(R.id.seek_bar);
+        final int total = epub_book.total_pages();
+        bar.setMax(Math.max(0, total - 1));
+        bar.setKeyProgressIncrement(Math.max(1, total / 100));
+        bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
+                label.setText(getString(R.string.page, progress + 1, total));
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+            }
+        });
+        bar.setProgress(epub_book_page);
+        label.setText(getString(R.string.page, epub_book_page + 1, total));
+        new AlertDialog.Builder(this)
+                .setTitle("跳转到页")
+                .setView(view)
+                .setPositiveButton("跳转", (dialog, which) -> {
+                    epub_book_page = bar.getProgress();
+                    notifyPageChanged(0);
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    private static final int[] TEXT_ZOOMS = {75, 90, 100, 115, 130, 150, 175, 200};
+
+    private void showZoomDialog() {
+        var prefs = getSharedPreferences("settings", MODE_PRIVATE);
+        int saved = prefs.getInt("novel_text_zoom", 100);
+        var labels = new String[TEXT_ZOOMS.length];
+        int current = 2; // 默认 100%
+        for (int i = 0; i < TEXT_ZOOMS.length; i++) {
+            labels[i] = TEXT_ZOOMS[i] + "%";
+            if (TEXT_ZOOMS[i] == saved) {
+                current = i;
+            }
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("字号")
+                .setSingleChoiceItems(labels, current, (dialog, which) -> {
+                    int zoom = TEXT_ZOOMS[which];
+                    prefs.edit().putInt("novel_text_zoom", zoom).apply();
+                    novelView.getSettings().setTextZoom(zoom);
+                    dialog.dismiss();
+                })
+                .show();
     }
 
     private void notifyPageChanged(int page_offset) {

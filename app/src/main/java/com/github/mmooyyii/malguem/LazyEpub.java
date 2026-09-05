@@ -40,6 +40,7 @@ public class LazyEpub implements Book {
     ResourceInterface file;
     // resource map
     List<String> contents; // page -> html
+    List<TocEntry> toc = new ArrayList<>(); // 目录 (标题 -> spine 页码), 没有目录时为空
 
     // name -> 解压后的字节, 带容量上限的 LRU, 防止长时间阅读时无限增长导致 OOM
     private final LinkedHashMap<String, byte[]> resource = new LinkedHashMap<>(16, 0.75f, true);
@@ -91,6 +92,11 @@ public class LazyEpub implements Book {
         if (data.types != null) {
             resource_type.putAll(data.types);
         }
+        if (data.toc != null) {
+            for (var ti : data.toc) {
+                toc.add(new TocEntry(ti.t, ti.p));
+            }
+        }
         buildSortedOffsets();
     }
 
@@ -113,7 +119,8 @@ public class LazyEpub implements Book {
     }
 
     // ---- 索引持久化: 中央目录 + opf 解析结果, 路径做主键, 不做内容失效 (epub 默认不改) ----
-    private static final int INDEX_VERSION = 1;
+    // v2: 新增目录(toc); 旧索引在 open 时判版本不符自动删除重建
+    private static final int INDEX_VERSION = 2;
 
     static class IndexEntry {
         String n; // fileName
@@ -121,6 +128,11 @@ public class LazyEpub implements Book {
         long c;   // compressedSize
         long u;   // uncompressedSize
         int m;    // compressionMethod
+    }
+
+    static class TocItem {
+        String t; // title
+        int p;    // spine 页码
     }
 
     static class IndexData {
@@ -131,6 +143,7 @@ public class LazyEpub implements Book {
         Integer cd_off;
         Integer cd_size;
         List<String> spine;
+        List<TocItem> toc;
         HashMap<String, String> types;
         List<IndexEntry> entries;
     }
@@ -144,6 +157,13 @@ public class LazyEpub implements Book {
         data.cd_off = centralDirOffset;
         data.cd_size = centralDirSize;
         data.spine = contents;
+        data.toc = new ArrayList<>();
+        for (var e : toc) {
+            var ti = new TocItem();
+            ti.t = e.title;
+            ti.p = e.page;
+            data.toc.add(ti);
+        }
         data.types = new HashMap<>(resource_type);
         // zip_dir 里有子路径别名指向同一条目, 按 fileName 去重后只存原始条目
         var byName = new HashMap<String, CentralDirEntry>();
@@ -415,6 +435,8 @@ public class LazyEpub implements Book {
         var id_to_path = new HashMap<String, String>();
         String coverByProps = null; // EPUB3: properties="cover-image"
         String coverByName = null;  // 兜底: id/href 含 cover 的图片
+        String ncxHref = null;      // EPUB2 目录: toc.ncx
+        String navHref = null;      // EPUB3 目录: properties="nav" 的导航文档
         for (int i = 0; i < items.getLength(); i++) {
             Element item = (Element) items.item(i);
             String id = item.getAttribute("id");
@@ -427,6 +449,12 @@ public class LazyEpub implements Book {
             var isImage = mediaType != null && mediaType.startsWith("image");
             if (props != null && props.contains("cover-image")) {
                 coverByProps = href;
+            }
+            if (props != null && props.contains("nav")) {
+                navHref = href;
+            }
+            if ("application/x-dtbncx+xml".equals(mediaType)) {
+                ncxHref = href;
             }
             if (coverByName == null && isImage
                     && (id.toLowerCase().contains("cover") || href.toLowerCase().contains("cover"))) {
@@ -463,6 +491,136 @@ public class LazyEpub implements Book {
                 contents.add(path);
             }
         }
+        // EPUB2 规范: <spine toc="ncx的id">, 优先于按 media-type 找到的
+        NodeList spines = doc.getElementsByTagName("spine");
+        if (spines.getLength() > 0) {
+            var tocId = ((Element) spines.item(0)).getAttribute("toc");
+            var p = id_to_path.get(tocId);
+            if (p != null) {
+                ncxHref = p;
+            }
+        }
+        try {
+            initToc(ncxHref, navHref);
+        } catch (Exception ignore) {
+            // 目录解析失败不影响开书, 菜单里显示"本书没有目录"
+        }
+    }
+
+    @Override
+    public List<TocEntry> toc() {
+        return toc;
+    }
+
+    // 解析目录文件 (优先 EPUB2 的 ncx, 其次 EPUB3 的 nav 文档), 把每个条目映射到 spine 页码
+    private void initToc(String ncxHref, String navHref) throws Exception {
+        // spine href -> 页码 的查找表; 与 registerEntry 同思路把每级子路径也注册进去,
+        // 目录文件与 opf 的相对路径基准可能不同, 用后缀匹配兜底
+        var lookup = new HashMap<String, Integer>();
+        for (int i = 0; i < contents.size(); i++) {
+            var full = cut(contents.get(i));
+            var parts = full.split("/");
+            for (int j = 0; j < parts.length; j++) {
+                var sub = String.join("/", Arrays.copyOfRange(parts, j, parts.length));
+                lookup.putIfAbsent(sub, i);
+            }
+        }
+        if (ncxHref != null) {
+            parseNcx(ncxHref, lookup);
+        }
+        if (toc.isEmpty() && navHref != null) {
+            parseNav(navHref, lookup);
+        }
+    }
+
+    private void parseNcx(String ncxHref, HashMap<String, Integer> lookup) throws Exception {
+        var bytes = load_file(ncxHref);
+        Document doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(new ByteArrayInputStream(bytes));
+        doc.getDocumentElement().normalize();
+        // getElementsByTagName 按文档顺序返回所有 navPoint (嵌套的子章节自然摊平)
+        NodeList points = doc.getElementsByTagName("navPoint");
+        for (int i = 0; i < points.getLength(); i++) {
+            Element np = (Element) points.item(i);
+            var texts = np.getElementsByTagName("text");
+            var srcs = np.getElementsByTagName("content");
+            if (texts.getLength() == 0 || srcs.getLength() == 0) {
+                continue;
+            }
+            // 自己的 navLabel 在子 navPoint 之前, item(0) 即本级标题
+            var label = texts.item(0).getTextContent();
+            var src = ((Element) srcs.item(0)).getAttribute("src");
+            addTocEntry(label, src, lookup);
+        }
+    }
+
+    private void parseNav(String navHref, HashMap<String, Integer> lookup) throws Exception {
+        var html = new String(load_file(navHref), StandardCharsets.UTF_8);
+        var doc = Jsoup.parse(html);
+        org.jsoup.nodes.Element tocNav = null;
+        for (var nav : doc.select("nav")) {
+            if ("toc".equals(nav.attr("epub:type"))) {
+                tocNav = nav;
+                break;
+            }
+        }
+        if (tocNav == null) {
+            tocNav = doc.selectFirst("nav");
+        }
+        if (tocNav == null) {
+            return;
+        }
+        for (var a : tocNav.select("a[href]")) {
+            addTocEntry(a.text(), a.attr("href"), lookup);
+        }
+    }
+
+    private void addTocEntry(String label, String src, HashMap<String, Integer> lookup) {
+        if (label == null || src == null) {
+            return;
+        }
+        label = label.trim();
+        var page = resolveSpine(lookup, src);
+        if (!label.isEmpty() && page != null) {
+            toc.add(new TocEntry(label, page));
+        }
+    }
+
+    // 目录条目的 href -> spine 页码: 去锚点/查询串后按后缀逐级匹配; 原样查不到再试 URL 解码后的
+    private Integer resolveSpine(HashMap<String, Integer> lookup, String src) {
+        int i = src.indexOf('#');
+        if (i >= 0) {
+            src = src.substring(0, i);
+        }
+        i = src.indexOf('?');
+        if (i >= 0) {
+            src = src.substring(0, i);
+        }
+        if (src.isEmpty()) {
+            return null;
+        }
+        var page = matchSuffix(lookup, cut(src));
+        if (page == null) {
+            try {
+                page = matchSuffix(lookup, cut(java.net.URLDecoder.decode(src, "UTF-8")));
+            } catch (Exception ignore) {
+            }
+        }
+        return page;
+    }
+
+    private static Integer matchSuffix(HashMap<String, Integer> lookup, String src) {
+        while (!src.isEmpty()) {
+            var idx = lookup.get(src);
+            if (idx != null) {
+                return idx;
+            }
+            int slash = src.indexOf('/');
+            if (slash < 0) {
+                return null;
+            }
+            src = src.substring(slash + 1);
+        }
+        return null;
     }
 
     private String cut(String filename) {

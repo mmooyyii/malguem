@@ -1,5 +1,8 @@
 package com.github.mmooyyii.malguem;
 
+import java.util.Collections;
+import java.util.List;
+
 public interface Book {
     String page(int page);
 
@@ -10,4 +13,19 @@ public interface Book {
     byte[] GetResource(String filename) throws Exception;
 
     String GetMediaType(String filename);
+
+    // 目录: 标题 -> spine 页码
+    class TocEntry {
+        public final String title;
+        public final int page;
+
+        public TocEntry(String title, int page) {
+            this.title = title;
+            this.page = page;
+        }
+    }
+
+    default List<TocEntry> toc() {
+        return Collections.emptyList();
+    }
 }
