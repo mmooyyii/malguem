@@ -16,7 +16,7 @@ Because of the streaming design the app makes **very frequent** range requests. 
 - The top row of the home screen is **Recents** — click to continue reading
 - On a list item, press **MENU or long-press OK**: book = switch comic/novel mode, source = edit/delete, recent = switch/remove
 - While reading, press **OK** for the menu: table of contents / go to page / font size & dark mode (novel) / reading direction & single-page (comic) / switch mode
-- The app checks for new releases at launch and installs updates automatically
+- A **Check updates** tile on the home screen downloads and installs new releases (no implicit background checks)
 
 #### Comic mode splits the screen into two pages side by side, shown whole without scrollbars. Turn pages with left/right; manga-style right-to-left order is available in the menu
 ![](comic_mode.webp)

@@ -117,6 +117,12 @@ public class FileListAdapter extends RecyclerView.Adapter<FileListAdapter.VH> {
                 h.coverIcon.setVisibility(View.VISIBLE);
                 h.caption.setText(display);
                 break;
+            case CheckUpdate:
+                h.cover.setBackgroundResource(R.drawable.cover_tile);
+                h.coverIcon.setImageResource(R.drawable.ic_update);
+                h.coverIcon.setVisibility(View.VISIBLE);
+                h.caption.setText(display);
+                break;
         }
 
         h.itemView.setOnClickListener(v -> {

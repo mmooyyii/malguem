@@ -4,7 +4,7 @@ package com.github.mmooyyii.malguem;
 public class ListItem {
 
     public enum FileType {
-        Resource, Dir, Epub, AddWebDav, RecentEpub
+        Resource, Dir, Epub, AddWebDav, RecentEpub, CheckUpdate
     }
 
     public enum ViewType {

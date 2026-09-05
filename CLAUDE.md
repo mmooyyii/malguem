@@ -19,7 +19,7 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
 
 ## 发版与应用内 OTA 更新
 
-发版流程: commit → 打 `v` 开头的 tag (如 `v1.5.0`) → push tag → GitHub Actions 构建签名 APK 并创建 Release. 电视上的 app 启动时自动检查更新、下载并拉起安装器.
+发版流程: commit → 打 `v` 开头的 tag (如 `v1.5.0`) → push tag → GitHub Actions 构建签名 APK 并创建 Release. 电视上用首页的"检查更新"按钮拉新版 (主人要求不做隐式自动检查).
 
 - `versionName` = tag 名, `versionCode` = CI run_number, 由 release.yml 的 env 注入; 本地构建默认 `dev`/1
 - Release 资产用**固定文件名**: `malguem-tv.apk` 与 `version.json` (`{"tag":"..."}`);

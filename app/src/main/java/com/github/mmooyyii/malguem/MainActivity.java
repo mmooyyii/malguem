@@ -51,7 +51,6 @@ public class MainActivity extends AppCompatActivity {
         pwd = new ArrayList<>();
         show_version();
         updater = new AppUpdater(this);
-        updater.checkOnLaunch();
         // 后台建索引时把进度并进右上角版本号那行小字
         IndexCrawler.setListener((built, running) -> runOnUiThread(() -> {
             if (isDestroyed()) {
@@ -96,6 +95,10 @@ public class MainActivity extends AppCompatActivity {
         switch (file.type) {
             case AddWebDav: {
                 showAddChooser();
+                break;
+            }
+            case CheckUpdate: {
+                updater.checkManually();
                 break;
             }
             case Resource: {
@@ -431,11 +434,12 @@ public class MainActivity extends AppCompatActivity {
         var list = new ArrayList<>(db.recent_books(5));
         list.addAll(db.resource_list());
         list.add(new ListItem(0, getString(R.string.add_source), ListItem.FileType.AddWebDav));
+        list.add(new ListItem(0, getString(R.string.check_update), ListItem.FileType.CheckUpdate));
         fileListAdapter.setClient(null);
         fileListAdapter.setItems(list);
         findViewById(R.id.listLoading).setVisibility(View.GONE);
-        // 只剩"添加数据源"一个格子时显示空书库引导
-        findViewById(R.id.emptyHint).setVisibility(list.size() == 1 ? View.VISIBLE : View.GONE);
+        // 只剩"添加数据源/检查更新"两个功能格子时显示空书库引导
+        findViewById(R.id.emptyHint).setVisibility(list.size() == 2 ? View.VISIBLE : View.GONE);
     }
 
     // 从阅读界面回来时刷新列表 (进度徽标/最近阅读). 用 onResume 而不是 ActivityResult:
@@ -447,8 +451,6 @@ public class MainActivity extends AppCompatActivity {
             skipFirstResume = false; // onCreate 里 init_resource_list 已经初始化过
             return;
         }
-        // HOME 挂后台几天再回来的场景也要能发现新版本 (内部有 6 小时节流)
-        updater.checkOnLaunch();
         if (at_root_list) {
             init_resource_list();
         } else {

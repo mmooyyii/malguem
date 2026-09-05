@@ -36,10 +36,6 @@ public class AppUpdater {
             "https://gh-proxy.com/https://github.com/mmooyyii/malguem/releases/latest/download/",
             "https://ghproxy.net/https://github.com/mmooyyii/malguem/releases/latest/download/",
     };
-    // 自动检查按时间节流而不是每进程一次: 电视上 app 用 HOME 退出时进程常驻,
-    // "每进程一次"会导致装完后再也不检查 (v1.6.0 -> v1.7.0 自动更新失灵的原因)
-    private static final long CHECK_INTERVAL_MS = 6 * 3600_000L;
-    private static long lastCheckAt = 0;
 
     private final AppCompatActivity activity;
     // 连接超时压短: 直连被墙时通常卡在握手, 尽快失败切到下一个源
@@ -70,26 +66,7 @@ public class AppUpdater {
                 });
     }
 
-    // 启动/回到前台时静默检查 (6 小时内不重复), 只有发现新版本才打扰用户
-    public void checkOnLaunch() {
-        var now = System.currentTimeMillis();
-        if (now - lastCheckAt < CHECK_INTERVAL_MS) {
-            return;
-        }
-        lastCheckAt = now;
-        new Thread(() -> {
-            var manifest = fetchManifest();
-            if (manifest == null) {
-                return; // 所有源都失败: 静默, 下次启动再试
-            }
-            var current = currentVersion();
-            if (!manifest.tag.equals(current)) {
-                main.post(() -> askAndDownload(manifest.tag, current));
-            }
-        }).start();
-    }
-
-    // 帮助对话框里的手动检查: 无论结果如何都给出反馈
+    // 手动检查 (首页按钮/帮助对话框): 无论结果如何都给出反馈; 不做任何隐式自动检查
     public void checkManually() {
         Toast.makeText(activity, R.string.checking_update, Toast.LENGTH_SHORT).show();
         new Thread(() -> {
