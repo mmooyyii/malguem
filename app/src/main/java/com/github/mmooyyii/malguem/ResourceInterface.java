@@ -25,6 +25,9 @@ public interface ResourceInterface {
         if ("local".equals(t)) {
             return LocalResource.fromMap(map);
         }
+        if ("opds".equals(t)) {
+            return OpdsResource.fromMap(map);
+        }
         // 缺省(含没有 type 字段的旧数据)按 webdav 处理
         return new WebdavResource(map.get("url"), map.get("username"), map.get("passwd"));
     }

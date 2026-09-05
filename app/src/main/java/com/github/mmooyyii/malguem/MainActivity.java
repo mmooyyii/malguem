@@ -166,7 +166,7 @@ public class MainActivity extends AppCompatActivity {
 
     // 新增数据源: 先选类型, 再进对应配置弹窗
     private void showAddChooser() {
-        String[] types = {"扫描局域网 (alist/SMB)", "WebDAV", "SMB", "本地硬盘"};
+        String[] types = {"扫描局域网 (alist/SMB)", "WebDAV", "SMB", "OPDS 书库 (Komga/Kavita/Calibre-Web)", "本地硬盘"};
         new AlertDialog.Builder(this)
                 .setTitle("选择数据源类型")
                 .setItems(types, (dialog, which) -> {
@@ -176,10 +176,48 @@ public class MainActivity extends AppCompatActivity {
                         showWebdavDialog(null, null, null, null);
                     } else if (which == 2) {
                         showSmbDialog(null, null, null, null, null, null);
+                    } else if (which == 3) {
+                        showOpdsDialog(null, null, null, null);
                     } else {
                         showLocalDialog(null, null);
                     }
                 })
+                .show();
+    }
+
+    // OPDS 书库: 复用 URL/用户名/密码 弹窗; Kavita 这类 key 拼在 URL 里的, 用户名密码留空即可
+    private void showOpdsDialog(String url, String user, String pass, Integer editId) {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_login, null);
+        final EditText etUsername = dialogView.findViewById(R.id.et_username);
+        final EditText etPassword = dialogView.findViewById(R.id.et_password);
+        final EditText etUrl = dialogView.findViewById(R.id.et_url);
+        if (url != null) {
+            etUrl.setText(url);
+        }
+        if (user != null) {
+            etUsername.setText(user);
+        }
+        if (pass != null) {
+            etPassword.setText(pass);
+        }
+        new AlertDialog.Builder(this)
+                .setTitle(editId == null ? "添加 OPDS 书库" : "编辑 OPDS 书库")
+                .setView(dialogView)
+                .setPositiveButton(editId == null ? "添加" : "保存", (dialog, which) -> {
+                    String username = etUsername.getText().toString();
+                    String password = etPassword.getText().toString();
+                    String u = etUrl.getText().toString().trim();
+                    var r = new OpdsResource(u, username, password);
+                    var db = Database.getInstance(MainActivity.this).getDatabase();
+                    if (editId == null) {
+                        db.add_resource(u, 4, r.to_json());
+                    } else {
+                        db.update_resource(editId, u, 4, r.to_json());
+                    }
+                    Toast.makeText(MainActivity.this, editId == null ? "添加成功" : "已保存", Toast.LENGTH_SHORT).show();
+                    init_resource_list();
+                })
+                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
                 .show();
     }
 
@@ -485,7 +523,10 @@ public class MainActivity extends AppCompatActivity {
             Toast.makeText(this, "数据库异常", Toast.LENGTH_SHORT).show();
             return;
         }
-        if (r instanceof WebdavResource) {
+        if (r instanceof OpdsResource) {
+            var o = (OpdsResource) r;
+            showOpdsDialog(o.url, o.username, o.password, id);
+        } else if (r instanceof WebdavResource) {
             var w = (WebdavResource) r;
             showWebdavDialog(w.url, w.username, w.password, id);
         } else if (r instanceof SmbResource) {
@@ -512,12 +553,14 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    // 帮助: 版本 + 按键说明 + 缓存概况 (covers 封面缩略图, updates OTA 包, SQLite 里的 epub 索引) + 检查更新
+    // 帮助: 版本 + 按键说明 + 缓存概况 (covers 封面缩略图, updates OTA 包, books 整本下载的 pdf, SQLite 里的 epub 索引) + 检查更新
     private void showHelpDialog() {
         File covers = new File(getCacheDir(), "covers");
         File updates = new File(getCacheDir(), "updates");
+        File books = new File(getCacheDir(), "books");
         long coverBytes = dir_size(covers);
         long updateBytes = dir_size(updates);
+        long bookBytes = dir_size(books);
         var db = Database.getInstance(this).getDatabase();
         long[] index = db.epub_index_stats();
         String version;
@@ -534,6 +577,7 @@ public class MainActivity extends AppCompatActivity {
                 + "\n\n缓存:"
                 + "\n封面 " + file_count(covers) + " 张, " + format_size(coverBytes)
                 + "\n索引 " + index[0] + " 本, " + format_size(index[1])
+                + "\nPDF " + file_count(books) + " 本, " + format_size(bookBytes)
                 + "\n更新包 " + format_size(updateBytes);
         new AlertDialog.Builder(this)
                 .setTitle("帮助")
@@ -543,8 +587,9 @@ public class MainActivity extends AppCompatActivity {
                     CoverLoader.get(this).clearMemory();
                     delete_children(covers);
                     delete_children(updates);
+                    delete_children(books);
                     db.clear_epub_index();
-                    Toast.makeText(this, "已清理 " + format_size(coverBytes + updateBytes + index[1]), Toast.LENGTH_SHORT).show();
+                    Toast.makeText(this, "已清理 " + format_size(coverBytes + updateBytes + bookBytes + index[1]), Toast.LENGTH_SHORT).show();
                 })
                 .setNegativeButton("关闭", (dialog, which) -> dialog.dismiss())
                 .show();
