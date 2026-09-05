@@ -16,15 +16,43 @@
         android:text="@string/my_library"
         style="@style/Text.Header" />
 
-    <androidx.recyclerview.widget.RecyclerView
-        android:id="@+id/fileListView"
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipChildren="false"
-        android:clipToPadding="false"
-        android:paddingStart="@dimen/grid_padding_h"
-        android:paddingEnd="@dimen/grid_padding_h"
-        android:paddingTop="@dimen/grid_padding_v"
-        android:paddingBottom="@dimen/grid_padding_v"
-        android:scrollbars="none" />
+        android:clipToPadding="false">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/fileListView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:paddingStart="@dimen/grid_padding_h"
+            android:paddingEnd="@dimen/grid_padding_h"
+            android:paddingTop="@dimen/grid_padding_v"
+            android:paddingBottom="@dimen/grid_padding_v"
+            android:scrollbars="none" />
+
+        <!-- 目录加载中的转圈 -->
+        <ProgressBar
+            android:id="@+id/listLoading"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="center"
+            android:visibility="gone" />
+
+        <!-- 空书库引导 -->
+        <TextView
+            android:id="@+id/emptyHint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:gravity="center"
+            android:lineSpacingExtra="6dp"
+            android:text="书库还是空的\n\n按 OK 键添加数据源\n支持自动扫描局域网里的 alist / SMB"
+            android:textColor="?android:attr/textColorSecondary"
+            android:textSize="18sp"
+            android:visibility="gone" />
+    </FrameLayout>
 </LinearLayout>

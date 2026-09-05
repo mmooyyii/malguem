@@ -12,7 +12,7 @@ import java.util.List;
 // 本地硬盘/USB 数据源, RandomAccessFile 支持按 range 随机读 (需 MANAGE_EXTERNAL_STORAGE 权限)
 public class LocalResource implements ResourceInterface {
 
-    private final String root;
+    final String root; // 包内可见: MainActivity 编辑数据源时要读出来做预填
 
     LocalResource(String root) {
         this.root = root == null ? "" : root;

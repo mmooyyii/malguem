@@ -74,30 +74,59 @@ public class AppUpdater {
         }
         checkedThisProcess = true;
         new Thread(() -> {
-            for (var i = 0; i < SOURCES.length; i++) {
-                try {
-                    var request = new Request.Builder().url(SOURCES[i] + "version.json").build();
-                    try (var response = client.newCall(request).execute()) {
-                        if (!response.isSuccessful() || response.body() == null) {
-                            continue;
-                        }
-                        var manifest = new Gson().fromJson(response.body().string(), Manifest.class);
-                        if (manifest == null || manifest.tag == null) {
-                            continue;
-                        }
-                        goodSource = i;
-                        var current = currentVersion();
-                        if (!manifest.tag.equals(current)) {
-                            main.post(() -> askAndDownload(manifest.tag, current));
-                        }
-                        return; // 拿到结果即结束; 版本相同则静默
-                    }
-                } catch (Exception ignore) {
-                    // 这个源不通 (超时/被墙/返回错误页), 换下一个
-                }
+            var manifest = fetchManifest();
+            if (manifest == null) {
+                return; // 所有源都失败: 静默, 下次启动再试
             }
-            // 所有源都失败: 静默, 下次启动再试
+            var current = currentVersion();
+            if (!manifest.tag.equals(current)) {
+                main.post(() -> askAndDownload(manifest.tag, current));
+            }
         }).start();
+    }
+
+    // 帮助对话框里的手动检查: 无论结果如何都给出反馈
+    public void checkManually() {
+        Toast.makeText(activity, "正在检查更新…", Toast.LENGTH_SHORT).show();
+        new Thread(() -> {
+            var manifest = fetchManifest();
+            var current = currentVersion();
+            main.post(() -> {
+                if (activity.isDestroyed()) {
+                    return;
+                }
+                if (manifest == null) {
+                    Toast.makeText(activity, "检查更新失败, 所有源都不可用", Toast.LENGTH_LONG).show();
+                } else if (manifest.tag.equals(current)) {
+                    Toast.makeText(activity, "已是最新版本 " + current, Toast.LENGTH_SHORT).show();
+                } else {
+                    askAndDownload(manifest.tag, current);
+                }
+            });
+        }).start();
+    }
+
+    // 依次尝试各源拉取 version.json, 成功的源记入 goodSource 供下载复用; 全失败返回 null
+    private Manifest fetchManifest() {
+        for (var i = 0; i < SOURCES.length; i++) {
+            try {
+                var request = new Request.Builder().url(SOURCES[i] + "version.json").build();
+                try (var response = client.newCall(request).execute()) {
+                    if (!response.isSuccessful() || response.body() == null) {
+                        continue;
+                    }
+                    var manifest = new Gson().fromJson(response.body().string(), Manifest.class);
+                    if (manifest == null || manifest.tag == null) {
+                        continue;
+                    }
+                    goodSource = i;
+                    return manifest;
+                }
+            } catch (Exception ignore) {
+                // 这个源不通 (超时/被墙/返回错误页), 换下一个
+            }
+        }
+        return null;
     }
 
     private String currentVersion() {

@@ -19,11 +19,12 @@ import jcifs.smb.SmbRandomAccessFile;
 // SMB/CIFS 数据源 (基于 jcifs-ng), 通过 SmbRandomAccessFile 支持按 range 随机读
 public class SmbResource implements ResourceInterface {
 
-    private final String host;
-    private final String share;
-    private final String username;
-    private final String password;
-    private final String domain;
+    // 包内可见: MainActivity 编辑数据源时要读出来做预填
+    final String host;
+    final String share;
+    final String username;
+    final String password;
+    final String domain;
     private final String baseUrl; // smb://host/share
 
     private transient CIFSContext cifs;

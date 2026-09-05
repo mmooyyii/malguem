@@ -15,8 +15,6 @@ import android.view.View;
 import android.widget.EditText;
 import android.widget.Toast;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
@@ -39,7 +37,7 @@ public class MainActivity extends AppCompatActivity {
     List<String> pwd;
     boolean at_root_list = false;
     long kill_app_countdown = 0;
-    private ActivityResultLauncher<Intent> launcher;
+    private boolean skipFirstResume = true;
     private AppUpdater updater;
     // 目录拉取共用一个后台线程, 避免每次 FetchFileListTask 新建一个从不 shutdown 的 executor 泄漏线程
     private final ExecutorService fetchExecutor = Executors.newSingleThreadExecutor();
@@ -50,16 +48,6 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         setup_file_list();
         pwd = new ArrayList<>();
-        launcher = registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    // 从首页"最近阅读"直接开书时没有进入任何目录, 返回后刷新首页而不是去 ls (此时 client 可能为 null)
-                    if (at_root_list) {
-                        init_resource_list();
-                    } else {
-                        new FetchFileListTask().executeTask();
-                    }
-                });
         updater = new AppUpdater(this);
         updater.checkOnLaunch();
         // 延迟启动后台索引爬取, 避开首屏封面加载抢网络
@@ -73,7 +61,17 @@ public class MainActivity extends AppCompatActivity {
         fileListView.setHasFixedSize(true);
         fileListAdapter = new FileListAdapter(this);
         fileListView.setAdapter(fileListAdapter);
-        fileListAdapter.setOnItemAction(this::onFileClicked);
+        fileListAdapter.setOnItemAction(new FileListAdapter.OnItemAction() {
+            @Override
+            public void onClick(ListItem item) {
+                onFileClicked(item);
+            }
+
+            @Override
+            public boolean onLongClick(ListItem item) {
+                return menuOnItem(item);
+            }
+        });
         init_resource_list();
     }
 
@@ -112,7 +110,7 @@ public class MainActivity extends AppCompatActivity {
                 intent.putExtra("book_uri", make_uri(file.name));
                 intent.putExtra("client", client.to_json());
 
-                launcher.launch(intent);
+                startActivity(intent);
                 break;
             }
             case RecentEpub: {
@@ -132,7 +130,7 @@ public class MainActivity extends AppCompatActivity {
                 intent.putExtra("resource_id", file.id);
                 intent.putExtra("book_uri", file.uri);
                 intent.putExtra("client", c.to_json());
-                launcher.launch(intent);
+                startActivity(intent);
                 break;
             }
         }
@@ -174,11 +172,11 @@ public class MainActivity extends AppCompatActivity {
                     if (which == 0) {
                         startLanScan();
                     } else if (which == 1) {
-                        showWebdavDialog(null);
+                        showWebdavDialog(null, null, null, null);
                     } else if (which == 2) {
-                        showSmbDialog(null);
+                        showSmbDialog(null, null, null, null, null, null);
                     } else {
-                        showLocalDialog();
+                        showLocalDialog(null, null);
                     }
                 })
                 .show();
@@ -226,80 +224,113 @@ public class MainActivity extends AppCompatActivity {
                     var h = hits.get(which);
                     if (h.port == LanScanner.PORT_ALIST) {
                         // alist 的 WebDAV 挂在 /dav 下
-                        showWebdavDialog("http://" + h.ip + ":" + LanScanner.PORT_ALIST + "/dav");
+                        showWebdavDialog("http://" + h.ip + ":" + LanScanner.PORT_ALIST + "/dav", null, null, null);
                     } else {
-                        showSmbDialog(h.ip);
+                        showSmbDialog(h.ip, null, null, null, null, null);
                     }
                 })
                 .setNegativeButton("取消", null)
                 .show();
     }
 
-    private void showWebdavDialog(String prefillUrl) {
+    // editId 为 null 是新增, 否则是编辑该 id 的数据源 (update 保 id, 进度不丢)
+    private void showWebdavDialog(String url, String user, String pass, Integer editId) {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_login, null);
         final EditText etUsername = dialogView.findViewById(R.id.et_username);
         final EditText etPassword = dialogView.findViewById(R.id.et_password);
         final EditText etUrl = dialogView.findViewById(R.id.et_url);
-        if (prefillUrl != null) {
-            etUrl.setText(prefillUrl);
+        if (url != null) {
+            etUrl.setText(url);
+        }
+        if (user != null) {
+            etUsername.setText(user);
+        }
+        if (pass != null) {
+            etPassword.setText(pass);
         }
         new AlertDialog.Builder(this)
-                .setTitle("添加 WebDAV")
+                .setTitle(editId == null ? "添加 WebDAV" : "编辑 WebDAV")
                 .setView(dialogView)
-                .setPositiveButton("添加", (dialog, which) -> {
+                .setPositiveButton(editId == null ? "添加" : "保存", (dialog, which) -> {
                     String username = etUsername.getText().toString();
                     String password = etPassword.getText().toString();
-                    String url = etUrl.getText().toString();
-                    var r = new WebdavResource(url, username, password);
+                    String u = etUrl.getText().toString();
+                    var r = new WebdavResource(u, username, password);
                     var db = Database.getInstance(MainActivity.this).getDatabase();
-                    db.add_resource(url, 1, r.to_json());
-                    Toast.makeText(MainActivity.this, "添加成功", Toast.LENGTH_SHORT).show();
+                    if (editId == null) {
+                        db.add_resource(u, 1, r.to_json());
+                    } else {
+                        db.update_resource(editId, u, 1, r.to_json());
+                    }
+                    Toast.makeText(MainActivity.this, editId == null ? "添加成功" : "已保存", Toast.LENGTH_SHORT).show();
                     init_resource_list();
                 })
                 .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
                 .show();
     }
 
-    private void showSmbDialog(String prefillHost) {
+    private void showSmbDialog(String host, String share, String user, String pass, String domain, Integer editId) {
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_smb, null);
         final EditText etHost = dialogView.findViewById(R.id.et_host);
         final EditText etShare = dialogView.findViewById(R.id.et_share);
         final EditText etUsername = dialogView.findViewById(R.id.et_username);
         final EditText etPassword = dialogView.findViewById(R.id.et_password);
-        if (prefillHost != null) {
-            etHost.setText(prefillHost);
+        if (host != null) {
+            etHost.setText(host);
         }
+        if (share != null) {
+            etShare.setText(share);
+        }
+        if (user != null) {
+            etUsername.setText(user);
+        }
+        if (pass != null) {
+            etPassword.setText(pass);
+        }
+        // 弹窗里不放 domain 输入, 编辑时原样保留
+        final String keepDomain = domain == null ? "" : domain;
         new AlertDialog.Builder(this)
-                .setTitle("添加 SMB")
+                .setTitle(editId == null ? "添加 SMB" : "编辑 SMB")
                 .setView(dialogView)
-                .setPositiveButton("添加", (dialog, which) -> {
-                    String host = etHost.getText().toString().trim();
-                    String share = etShare.getText().toString().trim();
-                    String user = etUsername.getText().toString();
-                    String pass = etPassword.getText().toString();
-                    var r = new SmbResource(host, share, user, pass, "");
+                .setPositiveButton(editId == null ? "添加" : "保存", (dialog, which) -> {
+                    String h = etHost.getText().toString().trim();
+                    String s = etShare.getText().toString().trim();
+                    String u = etUsername.getText().toString();
+                    String p = etPassword.getText().toString();
+                    var r = new SmbResource(h, s, u, p, keepDomain);
                     var db = Database.getInstance(MainActivity.this).getDatabase();
-                    db.add_resource("smb://" + host + "/" + share, 2, r.to_json());
-                    Toast.makeText(MainActivity.this, "添加成功", Toast.LENGTH_SHORT).show();
+                    if (editId == null) {
+                        db.add_resource("smb://" + h + "/" + s, 2, r.to_json());
+                    } else {
+                        db.update_resource(editId, "smb://" + h + "/" + s, 2, r.to_json());
+                    }
+                    Toast.makeText(MainActivity.this, editId == null ? "添加成功" : "已保存", Toast.LENGTH_SHORT).show();
                     init_resource_list();
                 })
                 .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
                 .show();
     }
 
-    private void showLocalDialog() {
+    private void showLocalDialog(String path, Integer editId) {
         ensureStoragePermission();
         View dialogView = getLayoutInflater().inflate(R.layout.dialog_local, null);
         final EditText etPath = dialogView.findViewById(R.id.et_path);
+        if (path != null) {
+            etPath.setText(path);
+        }
         new AlertDialog.Builder(this)
-                .setTitle("添加本地目录")
+                .setTitle(editId == null ? "添加本地目录" : "编辑本地目录")
                 .setView(dialogView)
-                .setPositiveButton("添加", (dialog, which) -> {
-                    String path = etPath.getText().toString().trim();
-                    var r = new LocalResource(path);
+                .setPositiveButton(editId == null ? "添加" : "保存", (dialog, which) -> {
+                    String p = etPath.getText().toString().trim();
+                    var r = new LocalResource(p);
                     var db = Database.getInstance(MainActivity.this).getDatabase();
-                    db.add_resource(path, 3, r.to_json());
-                    Toast.makeText(MainActivity.this, "添加成功", Toast.LENGTH_SHORT).show();
+                    if (editId == null) {
+                        db.add_resource(p, 3, r.to_json());
+                    } else {
+                        db.update_resource(editId, p, 3, r.to_json());
+                    }
+                    Toast.makeText(MainActivity.this, editId == null ? "添加成功" : "已保存", Toast.LENGTH_SHORT).show();
                     init_resource_list();
                 })
                 .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
@@ -335,6 +366,25 @@ public class MainActivity extends AppCompatActivity {
         list.add(new ListItem(0, "添加数据源", ListItem.FileType.AddWebDav));
         fileListAdapter.setClient(null);
         fileListAdapter.setItems(list);
+        findViewById(R.id.listLoading).setVisibility(View.GONE);
+        // 只剩"添加数据源"一个格子时显示空书库引导
+        findViewById(R.id.emptyHint).setVisibility(list.size() == 1 ? View.VISIBLE : View.GONE);
+    }
+
+    // 从阅读界面回来时刷新列表 (进度徽标/最近阅读). 用 onResume 而不是 ActivityResult:
+    // 阅读中切换模式会 finish 旧 reader 再起新 reader, result 链会断, onResume 能覆盖所有返回路径
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (skipFirstResume) {
+            skipFirstResume = false; // onCreate 里 init_resource_list 已经初始化过
+            return;
+        }
+        if (at_root_list) {
+            init_resource_list();
+        } else {
+            new FetchFileListTask().executeTask();
+        }
     }
 
     @Override
@@ -343,13 +393,13 @@ public class MainActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
-    // menu 键 = 原长按逻辑 (书切换小说/漫画, 数据源删除), 没聚焦可操作项时回落到缓存对话框;
+    // menu 键(或长按OK): 书切换小说/漫画, 数据源编辑/删除, 最近阅读切换/移除; 没聚焦可操作项时显示帮助;
     // config/设置键 = 对聚焦的书删索引
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         if (keyCode == KeyEvent.KEYCODE_MENU) {
             if (!menuOnFocusedItem()) {
-                showCacheDialog();
+                showHelpDialog();
             }
             return true;
         }
@@ -380,11 +430,13 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean menuOnFocusedItem() {
         var item = focusedItem();
-        if (item == null) {
-            return false;
-        }
+        return item != null && menuOnItem(item);
+    }
+
+    // 菜单键与长按 OK 共用: 数据源=编辑/删除, 书=切换阅读模式, 最近阅读=切换/移除
+    private boolean menuOnItem(ListItem item) {
         if (item.type == ListItem.FileType.Resource) {
-            showDeleteConfirmationDialog(item.id);
+            showResourceMenu(item);
             return true;
         }
         if (item.type == ListItem.FileType.Epub) {
@@ -394,29 +446,89 @@ public class MainActivity extends AppCompatActivity {
             return true;
         }
         if (item.type == ListItem.FileType.RecentEpub) {
-            var db = Database.getInstance(this).getDatabase();
-            db.switch_view_type(item.id, item.uri);
-            init_resource_list();
+            showRecentMenu(item);
             return true;
         }
         return false;
     }
 
-    // 磁盘缓存: covers 封面缩略图, updates OTA 下载的 apk, SQLite 里的 epub 索引; 另有 CoverLoader 内存 LRU
-    private void showCacheDialog() {
+    private void showResourceMenu(ListItem item) {
+        new AlertDialog.Builder(this)
+                .setTitle(item.name)
+                .setItems(new String[]{"编辑", "删除"}, (dialog, which) -> {
+                    if (which == 0) {
+                        editResource(item.id);
+                    } else {
+                        showDeleteConfirmationDialog(item.id);
+                    }
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    // 编辑数据源: 预填现有配置, 保存时保住 id, 各书的阅读进度不丢
+    private void editResource(int id) {
+        var db = Database.getInstance(this).getDatabase();
+        var r = db.get_resource(id);
+        if (r == null) {
+            Toast.makeText(this, "数据库异常", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (r instanceof WebdavResource) {
+            var w = (WebdavResource) r;
+            showWebdavDialog(w.url, w.username, w.password, id);
+        } else if (r instanceof SmbResource) {
+            var s = (SmbResource) r;
+            showSmbDialog(s.host, s.share, s.username, s.password, s.domain, id);
+        } else if (r instanceof LocalResource) {
+            showLocalDialog(((LocalResource) r).root, id);
+        }
+    }
+
+    private void showRecentMenu(ListItem item) {
+        new AlertDialog.Builder(this)
+                .setTitle(item.name)
+                .setItems(new String[]{"切换 漫画/小说", "从最近阅读移除"}, (dialog, which) -> {
+                    var db = Database.getInstance(this).getDatabase();
+                    if (which == 0) {
+                        db.switch_view_type(item.id, item.uri);
+                    } else {
+                        db.clear_last_read(item.id, item.uri);
+                    }
+                    init_resource_list();
+                })
+                .setNegativeButton("取消", null)
+                .show();
+    }
+
+    // 帮助: 版本 + 按键说明 + 缓存概况 (covers 封面缩略图, updates OTA 包, SQLite 里的 epub 索引) + 检查更新
+    private void showHelpDialog() {
         File covers = new File(getCacheDir(), "covers");
         File updates = new File(getCacheDir(), "updates");
         long coverBytes = dir_size(covers);
         long updateBytes = dir_size(updates);
         var db = Database.getInstance(this).getDatabase();
         long[] index = db.epub_index_stats();
-        String msg = "封面: " + file_count(covers) + " 张, " + format_size(coverBytes)
-                + "\n索引: " + index[0] + " 本, " + format_size(index[1])
-                + "\n更新包: " + format_size(updateBytes);
+        String version;
+        try {
+            version = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
+        } catch (Exception e) {
+            version = "?";
+        }
+        String msg = "版本: " + version
+                + "\n\n按键说明:"
+                + "\n· 菜单键 / 长按OK — 书: 切换漫画/小说; 数据源: 编辑/删除; 最近阅读: 切换/移除"
+                + "\n· 设置键 — 删除聚焦那本书的索引与封面"
+                + "\n· 阅读中按OK — 目录 / 跳页 / 字号 / 夜间 / 阅读方向 / 单页"
+                + "\n\n缓存:"
+                + "\n封面 " + file_count(covers) + " 张, " + format_size(coverBytes)
+                + "\n索引 " + index[0] + " 本, " + format_size(index[1])
+                + "\n更新包 " + format_size(updateBytes);
         new AlertDialog.Builder(this)
-                .setTitle("缓存")
+                .setTitle("帮助")
                 .setMessage(msg)
-                .setPositiveButton("清空", (dialog, which) -> {
+                .setPositiveButton("检查更新", (dialog, which) -> updater.checkManually())
+                .setNeutralButton("清空缓存", (dialog, which) -> {
                     CoverLoader.get(this).clearMemory();
                     delete_children(covers);
                     delete_children(updates);
@@ -522,18 +634,40 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
+    // 目录拉取失败时给出重试入口, 不再只丢一个 toast 停在旧列表上
+    private void showListError() {
+        if (isDestroyed()) {
+            return;
+        }
+        new AlertDialog.Builder(this)
+                .setTitle("目录加载失败")
+                .setMessage("网络或服务器出错了")
+                .setPositiveButton("重试", (dialog, which) -> new FetchFileListTask().executeTask())
+                .setNegativeButton("回首页", (dialog, which) -> {
+                    pwd.clear();
+                    init_resource_list();
+                })
+                .show();
+    }
+
     private class FetchFileListTask {
         private final Handler handler = new Handler(Looper.getMainLooper());
 
         public void executeTask() {
+            // 只会从主线程发起 (点击/按键/对话框回调), 直接操作 view
+            findViewById(R.id.listLoading).setVisibility(View.VISIBLE);
+            findViewById(R.id.emptyHint).setVisibility(View.GONE);
             fetchExecutor.execute(() -> {
                 at_root_list = false;
                 List<ListItem> fileList;
                 try {
                     fileList = client.ls(current_resource_id, pwd);
                 } catch (Exception e) {
-                    // 这里在后台线程, Toast 必须切回主线程, 否则会抛 "Can't toast on a thread that has not called Looper.prepare()"
-                    handler.post(() -> Toast.makeText(MainActivity.this, "http请求失败", Toast.LENGTH_SHORT).show());
+                    // 这里在后台线程, UI 操作必须切回主线程
+                    handler.post(() -> {
+                        findViewById(R.id.listLoading).setVisibility(View.GONE);
+                        showListError();
+                    });
                     return;
                 }
                 var epubs = new ArrayList<String>();
@@ -556,6 +690,7 @@ public class MainActivity extends AppCompatActivity {
                 }
                 final var finalFileList = fileList;
                 handler.post(() -> {
+                    findViewById(R.id.listLoading).setVisibility(View.GONE);
                     fileListAdapter.setClient(client);
                     fileListAdapter.setItems(finalFileList);
                 });

@@ -36,13 +36,15 @@ public class Database {
 
         // 数据库名称和版本
         private static final String DATABASE_NAME = "malguem.db";
-        private static final int DATABASE_VERSION = 4;
+        private static final int DATABASE_VERSION = 6;
 
         // 创建表的 SQL 语句
         private static final String RESOURCE_TABLE = "CREATE TABLE resource (id INTEGER PRIMARY KEY, name TEXT NOT NULL, resource_type INTEGER NOT NULL, json_info TEXT NOT NULL);";
 
-        // rtl: 漫画从右到左阅读(日漫), 按书保存; last_read: 最近一次阅读的毫秒时间戳, 首页"最近阅读"按它排序
-        private static final String EPUB_TABLE = "CREATE TABLE epub (resource_id INTEGER NOT NULL,path TEXT NOT NULL, total_page INTEGER NOT NULL default 0, current_page INTEGER NOT NULL default 0, page_offset INTEGER NOT NULL default 0, view_type INTEGER NOT NULL default 0, rtl INTEGER NOT NULL default 0, last_read INTEGER NOT NULL default 0, PRIMARY KEY (resource_id, path));";
+        // rtl: 漫画从右到左阅读(日漫); single_page: 漫画单页模式; 都按书保存.
+        // last_read: 最近一次阅读的毫秒时间戳, 首页"最近阅读"按它排序.
+        // page_offset: 小说章内滚动位置, 存 0-10000 的万分比而不是像素 —— 字号/夜间模式会改变排版高度, 按比例才能对得上
+        private static final String EPUB_TABLE = "CREATE TABLE epub (resource_id INTEGER NOT NULL,path TEXT NOT NULL, total_page INTEGER NOT NULL default 0, current_page INTEGER NOT NULL default 0, page_offset INTEGER NOT NULL default 0, view_type INTEGER NOT NULL default 0, rtl INTEGER NOT NULL default 0, last_read INTEGER NOT NULL default 0, single_page INTEGER NOT NULL default 0, PRIMARY KEY (resource_id, path));";
 
         // epub 索引缓存: 中央目录 + opf 解析结果, 免掉开书/加载封面时的元数据网络往返.
         // namespace 是数据源配置的 json(区分不同服务器/账号), path 是包内路径, 一起做主键; 不做内容失效
@@ -80,6 +82,14 @@ public class Database {
                 db.execSQL("ALTER TABLE epub ADD COLUMN rtl INTEGER NOT NULL default 0");
                 db.execSQL("ALTER TABLE epub ADD COLUMN last_read INTEGER NOT NULL default 0");
             }
+            if (oldVersion < 5) {
+                // v5 新增 漫画单页模式
+                db.execSQL("ALTER TABLE epub ADD COLUMN single_page INTEGER NOT NULL default 0");
+            }
+            if (oldVersion < 6) {
+                // v6 page_offset 语义从像素改为万分比, 旧像素值无法换算, 一次性清零 (只丢章内位置, 章节进度保留)
+                db.execSQL("update epub set page_offset = 0");
+            }
         }
 
         // type: 1=webdav 2=smb 3=local; json 由各 ResourceInterface.to_json() 生成(自带 type 字段)
@@ -90,6 +100,16 @@ public class Database {
             values.put("resource_type", type);
             values.put("json_info", json);
             cur.insert("resource", null, values);
+        }
+
+        // 编辑数据源: 保住 id 不变, 这样 epub 表里按 resource_id 存的阅读进度不会丢
+        public void update_resource(int resource_id, String name, int type, String json) {
+            var cur = getWritableDatabase();
+            ContentValues values = new ContentValues();
+            values.put("name", name);
+            values.put("resource_type", type);
+            values.put("json_info", json);
+            cur.update("resource", values, "id=?", new String[]{String.valueOf(resource_id)});
         }
 
         public ResourceInterface get_resource(int resource_id) {
@@ -149,6 +169,22 @@ public class Database {
             return list;
         }
 
+        // 从首页"最近阅读"移除一条 (进度本身保留)
+        public void clear_last_read(int resource_id, String path) {
+            var cur = getWritableDatabase();
+            ContentValues values = new ContentValues();
+            values.put("last_read", 0);
+            cur.update("epub", values, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path});
+        }
+
+        public void set_single_page(int resource_id, String path, boolean single) {
+            init_epub(resource_id, path);
+            var cur = getWritableDatabase();
+            ContentValues values = new ContentValues();
+            values.put("single_page", single ? 1 : 0);
+            cur.update("epub", values, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path});
+        }
+
         public void set_rtl(int resource_id, String path, boolean rtl) {
             init_epub(resource_id, path);
             var cur = getWritableDatabase();
@@ -169,6 +205,15 @@ public class Database {
             cur.insertWithOnConflict("epub", null, values, SQLiteDatabase.CONFLICT_IGNORE);
         }
 
+        // 0=漫画 1=小说; 阅读中切换模式时用, 明确目标值比 toggle 稳
+        public void set_view_type(int resource_id, String path, int view_type) {
+            init_epub(resource_id, path);
+            var cur = getWritableDatabase();
+            ContentValues values = new ContentValues();
+            values.put("view_type", view_type);
+            cur.update("epub", values, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path});
+        }
+
         public void switch_view_type(int resource_id, String path) {
             init_epub(resource_id, path);
             var cur = getWritableDatabase();
@@ -179,11 +224,12 @@ public class Database {
         public ReadHistory get_epub_info(int resource_id, String path) {
             var output = new ReadHistory();
             var db = getReadableDatabase();
-            var cursor = db.query("epub", new String[]{"current_page", "page_offset", "view_type", "rtl"}, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path}, null, null, null);
+            var cursor = db.query("epub", new String[]{"current_page", "page_offset", "view_type", "rtl", "single_page"}, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path}, null, null, null);
             if (cursor.moveToNext()) {
                 output.current_page = cursor.getInt(cursor.getColumnIndexOrThrow("current_page"));
                 output.page_offset = cursor.getInt(cursor.getColumnIndexOrThrow("page_offset"));
                 output.rtl = cursor.getInt(cursor.getColumnIndexOrThrow("rtl")) == 1;
+                output.single_page = cursor.getInt(cursor.getColumnIndexOrThrow("single_page")) == 1;
                 var type = cursor.getInt(cursor.getColumnIndexOrThrow("view_type"));
                 if (type == 0) {
                     output.view_type = ListItem.ViewType.Comic;
