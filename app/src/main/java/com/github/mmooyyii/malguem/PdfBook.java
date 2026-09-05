@@ -10,7 +10,7 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.LinkedHashMap;
-import java.util.function.LongConsumer;
+import java.util.function.BiConsumer;
 
 // PDF 阅读: PdfRenderer 只认本地文件, 没法像 epub 那样流式读, 所以整本下载到 cache/books 后按页渲染.
 // 每页 html 只有一个 <img>, 图片字节由 GetResource 按需渲染, 天然适配 Comic/Novel 两种界面与单页/RTL.
@@ -33,18 +33,24 @@ public class PdfBook implements Book {
         renderer = new PdfRenderer(pfd);
     }
 
-    // 下载(或复用本地缓存)后打开; progress 收到已下载的字节数
+    // 下载(或复用本地缓存)后打开; progress 收到 (已下载字节数, 总字节数), 总大小拿不到时为 -1
     public static PdfBook open(String namespace, String uri, ResourceInterface client,
-                               File cacheDir, LongConsumer progress) throws Exception {
+                               File cacheDir, BiConsumer<Long, Long> progress) throws Exception {
         var dir = new File(cacheDir, "books");
         //noinspection ResultOfMethodCallIgnored
         dir.mkdirs();
         var key = Integer.toHexString((namespace + "|" + uri).hashCode());
         var file = new File(dir, key + ".pdf");
         if (file.length() == 0) {
+            long total;
+            try {
+                total = client.size(uri);
+            } catch (Exception e) {
+                total = -1; // 拿不到大小只影响百分比显示
+            }
             // 先写 .part 再原子改名, 避免下到一半的文件被当成完整缓存
             var tmp = new File(dir, key + ".part");
-            download(client, uri, tmp, progress);
+            download(client, uri, tmp, total, progress);
             if (!tmp.renameTo(file)) {
                 throw new IOException("无法写入缓存: " + file);
             }
@@ -60,7 +66,8 @@ public class PdfBook implements Book {
     }
 
     // 按 8MB 分块顺序拉整本: 三种数据源在文件尾都会截断返回, 精确越界读则可能报 416, 都视为读完
-    private static void download(ResourceInterface client, String uri, File out, LongConsumer progress) throws Exception {
+    private static void download(ResourceInterface client, String uri, File out,
+                                 long total, BiConsumer<Long, Long> progress) throws Exception {
         long off = 0;
         try (var fos = new FileOutputStream(out)) {
             while (true) {
@@ -81,7 +88,7 @@ public class PdfBook implements Book {
                 }
                 fos.write(part);
                 off += part.length;
-                progress.accept(off);
+                progress.accept(off, total);
                 if (part.length < CHUNK) {
                     break;
                 }

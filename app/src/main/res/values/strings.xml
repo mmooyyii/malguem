@@ -86,6 +86,8 @@
     <string name="jump">Go</string>
     <string name="open_book_failed">Failed to open: %1$s</string>
     <string name="pdf_downloading">Downloading PDF, %1$s MB</string>
+    <string name="pdf_downloading_pct">Downloading PDF %1$d%% (%2$s / %3$s MB)</string>
+    <string name="indexing">indexing %1$d books…</string>
 
     <!-- 书封角标 -->
     <string name="novel_label">Novel</string>

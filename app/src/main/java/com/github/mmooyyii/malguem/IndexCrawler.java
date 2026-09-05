@@ -18,6 +18,24 @@ public class IndexCrawler {
     private static final int MAX_NEW_INDEX = 200;         // 单次启动最多新建索引数
     private static final int MAX_CONSECUTIVE_FAILS = 3;   // 连续建索引失败次数上限, 网络不通时尽早放弃
 
+    // 进度上报给首页做状态显示; 回调在爬虫线程, UI 侧自己切主线程
+    public interface Listener {
+        void onProgress(int built, boolean running);
+    }
+
+    private static volatile Listener progressListener;
+
+    public static void setListener(Listener l) {
+        progressListener = l;
+    }
+
+    private static void report(int built, boolean running) {
+        var l = progressListener;
+        if (l != null) {
+            l.onProgress(built, running);
+        }
+    }
+
     // 每个进程只跑一轮, 低优先级后台线程
     public static void start(Context ctx) {
         if (!started.compareAndSet(false, true)) {
@@ -31,6 +49,16 @@ public class IndexCrawler {
     }
 
     private static void run(Context ctx) {
+        int built = 0;
+        try {
+            built = crawlAll(ctx);
+        } finally {
+            report(built, false);
+        }
+    }
+
+    private static int crawlAll(Context ctx) {
+        int built = 0;
         var db = Database.getInstance(ctx).getDatabase();
         var covers = CoverLoader.get(ctx);
         var clients = new ArrayList<ResourceInterface>();
@@ -52,7 +80,7 @@ public class IndexCrawler {
         int budget = MAX_NEW_INDEX;
         for (var client : clients) {
             if (Thread.currentThread().isInterrupted()) {
-                return;
+                return built;
             }
             var ns = client.to_json();
             var live = new HashSet<String>();
@@ -74,6 +102,8 @@ public class IndexCrawler {
                     db.put_epub_index(ns, uri, book.index_json());
                     budget--;
                     fails = 0;
+                    built++;
+                    report(built, true);
                 } catch (Exception e) {
                     fails++;
                 }
@@ -88,6 +118,7 @@ public class IndexCrawler {
                 }
             }
         }
+        return built;
     }
 
     // BFS 遍历目录树, 收集所有 epub 的 uri (与 MainActivity.make_uri 一致的 "/a/b/c.epub" 形式); 返回是否完整遍历

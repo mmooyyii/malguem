@@ -49,6 +49,13 @@ public class LocalResource implements ResourceInterface {
     }
 
     @Override
+    public long size(String uri) {
+        var f = new File(root, uri.startsWith("/") ? uri.substring(1) : uri);
+        var len = f.length();
+        return len > 0 ? len : -1;
+    }
+
+    @Override
     public byte[] open(String uri, Slice slice) throws Exception {
         var slices = new ArrayList<Slice>();
         slices.add(slice);

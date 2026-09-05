@@ -100,6 +100,11 @@ public class OpdsResource implements ResourceInterface {
         return http().open(resolveHref(uri), slices);
     }
 
+    @Override
+    public long size(String uri) throws Exception {
+        return http().size(resolveHref(uri));
+    }
+
     private WebdavResource http() {
         if (http == null) {
             http = new WebdavResource("", username, password);

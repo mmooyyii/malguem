@@ -40,6 +40,7 @@ public class ComicActivity extends AppCompatActivity {
     private WebView ComicViewRight;
 
     private TextView pageView;
+    private android.widget.ProgressBar pageLoading;
     Book epub_book;
     int epub_book_page;
     int resource_id;
@@ -57,6 +58,7 @@ public class ComicActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_comic);
         pageView = findViewById(R.id.pageNumberTextView);
+        pageLoading = findViewById(R.id.pageLoading);
         ComicViewLeft = findViewById(R.id.comicLeft);
         ComicViewRight = findViewById(R.id.comicRight);
         var webSettings = ComicViewLeft.getSettings();
@@ -317,6 +319,8 @@ public class ComicActivity extends AppCompatActivity {
         epub_book_page = firstPage;
         final boolean two = !single;
         final int secondPage = firstPage + 1;
+        // 页面图片要从网络拉时会卡一下, 转个圈让人知道在加载 (调用方都在主线程)
+        pageLoading.setVisibility(View.VISIBLE);
         loadExecutor.execute(() -> {
             try {
                 epub_book.prepare(firstPage, Math.min(firstPage + (two ? 2 : 1), total));
@@ -328,6 +332,7 @@ public class ComicActivity extends AppCompatActivity {
                 if (isDestroyed()) {
                     return;
                 }
+                pageLoading.setVisibility(View.GONE);
                 if (single) {
                     // 单页模式: 右栏隐藏, 左栏占满整屏
                     ComicViewRight.setVisibility(View.GONE);
@@ -375,8 +380,23 @@ public class ComicActivity extends AppCompatActivity {
         private final DecimalFormat fmt = new DecimalFormat("0.000"); // 保留进度格式化
         private final TextView progressMessageTextView;
 
+        private final android.widget.ProgressBar progressPercent;
+
         public OpenEpub(android.view.View dialogView) {
             this.progressMessageTextView = dialogView.findViewById(R.id.message);
+            this.progressPercent = dialogView.findViewById(R.id.progress_percent);
+        }
+
+        // 下载进度: 知道总大小时给百分比进度条, 不知道时退化成已下载 MB 数
+        private void showDownloadProgress(long done, long total) {
+            if (total > 0) {
+                progressPercent.setVisibility(View.VISIBLE);
+                progressPercent.setProgress((int) Math.min(1000, done * 1000 / total));
+                progressMessageTextView.setText(getString(R.string.pdf_downloading_pct,
+                        (int) (done * 100 / total), fmt.format(done / 1048576.0), fmt.format(total / 1048576.0)));
+            } else {
+                progressMessageTextView.setText(getString(R.string.pdf_downloading, fmt.format(done / 1048576.0)));
+            }
         }
 
         public void executeTask() {
@@ -394,8 +414,7 @@ public class ComicActivity extends AppCompatActivity {
                     if (book_uri != null && book_uri.toLowerCase().endsWith(".pdf")) {
                         // pdf 整本下载到缓存后按页渲染 (PdfRenderer 只认本地文件)
                         epub_book = PdfBook.open(client.to_json(), book_uri, client, getCacheDir(),
-                                done -> handler.post(() -> progressMessageTextView.setText(
-                                        getString(R.string.pdf_downloading, fmt.format(done / 1048576.0)))));
+                                (done, total) -> handler.post(() -> showDownloadProgress(done, total)));
                     } else {
                         // 有持久化索引时 0 次网络往返完成开书
                         epub_book = LazyEpub.open(client.to_json(), book_uri, client, db);

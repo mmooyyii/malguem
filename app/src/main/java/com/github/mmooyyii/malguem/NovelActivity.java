@@ -32,6 +32,7 @@ public class NovelActivity extends AppCompatActivity {
 
     private WebView novelView;
     private TextView pageView;
+    private android.widget.ProgressBar pageLoading;
     Book epub_book;
     int epub_book_page;
     int resource_id;
@@ -61,6 +62,7 @@ public class NovelActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_novel);
         pageView = findViewById(R.id.pageNumberTextView);
+        pageLoading = findViewById(R.id.pageLoading);
         novelView = findViewById(R.id.webView);
         var webSettings = novelView.getSettings();
         webSettings.setAllowFileAccess(true);
@@ -381,6 +383,8 @@ public class NovelActivity extends AppCompatActivity {
         final int total = epub_book.total_pages();
         final int page = Math.max(0, Math.min(epub_book_page, total - 1));
         epub_book_page = page;
+        // 章节要从网络拉时会卡一下, 转个圈让人知道在加载 (调用方都在主线程)
+        pageLoading.setVisibility(android.view.View.VISIBLE);
         loadExecutor.execute(() -> {
             try {
                 epub_book.prepare(page, page + 1);
@@ -391,6 +395,7 @@ public class NovelActivity extends AppCompatActivity {
                 if (isDestroyed()) {
                     return;
                 }
+                pageLoading.setVisibility(android.view.View.GONE);
                 if (html != null) {
                     show_new_page(html, page_offset);
                 }
@@ -408,8 +413,23 @@ public class NovelActivity extends AppCompatActivity {
         private final DecimalFormat fmt = new DecimalFormat("0.000"); // 保留进度格式化
         private final TextView progressMessageTextView;
 
+        private final android.widget.ProgressBar progressPercent;
+
         public OpenEpub(android.view.View dialogView) {
             this.progressMessageTextView = dialogView.findViewById(R.id.message);
+            this.progressPercent = dialogView.findViewById(R.id.progress_percent);
+        }
+
+        // 下载进度: 知道总大小时给百分比进度条, 不知道时退化成已下载 MB 数
+        private void showDownloadProgress(long done, long total) {
+            if (total > 0) {
+                progressPercent.setVisibility(android.view.View.VISIBLE);
+                progressPercent.setProgress((int) Math.min(1000, done * 1000 / total));
+                progressMessageTextView.setText(getString(R.string.pdf_downloading_pct,
+                        (int) (done * 100 / total), fmt.format(done / 1048576.0), fmt.format(total / 1048576.0)));
+            } else {
+                progressMessageTextView.setText(getString(R.string.pdf_downloading, fmt.format(done / 1048576.0)));
+            }
         }
 
         public void executeTask() {
@@ -428,8 +448,7 @@ public class NovelActivity extends AppCompatActivity {
                     if (book_uri != null && book_uri.toLowerCase().endsWith(".pdf")) {
                         // pdf 整本下载到缓存后按页渲染 (PdfRenderer 只认本地文件)
                         epub_book = PdfBook.open(client.to_json(), book_uri, client, getCacheDir(),
-                                done -> handler.post(() -> progressMessageTextView.setText(
-                                        getString(R.string.pdf_downloading, fmt.format(done / 1048576.0)))));
+                                (done, total) -> handler.post(() -> showDownloadProgress(done, total)));
                     } else {
                         // 有持久化索引时 0 次网络往返完成开书
                         epub_book = LazyEpub.open(client.to_json(), book_uri, client, db);

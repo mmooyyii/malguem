@@ -9,6 +9,18 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- 翻页/预取未就绪时的小转圈 -->
+    <ProgressBar
+        android:id="@+id/pageLoading"
+        android:layout_width="28dp"
+        android:layout_height="28dp"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentEnd="true"
+        android:layout_margin="16dp"
+        android:indeterminate="true"
+        android:indeterminateTint="@color/accent"
+        android:visibility="gone" />
+
     <TextView
         android:id="@+id/pageNumberTextView"
         android:layout_width="wrap_content"

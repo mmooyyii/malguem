@@ -76,6 +76,8 @@
     <string name="jump">跳转</string>
     <string name="open_book_failed">打开失败: %1$s</string>
     <string name="pdf_downloading">正在下载 PDF %1$s MB</string>
+    <string name="pdf_downloading_pct">正在下载 PDF %1$d%% (%2$s / %3$s MB)</string>
+    <string name="indexing">后台建索引 %1$d 本…</string>
 
     <string name="novel_label">小说</string>
     <string name="comic_label">漫画</string>

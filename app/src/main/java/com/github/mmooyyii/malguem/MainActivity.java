@@ -38,6 +38,7 @@ public class MainActivity extends AppCompatActivity {
     boolean at_root_list = false;
     long kill_app_countdown = 0;
     private boolean skipFirstResume = true;
+    private String versionName = "";
     private AppUpdater updater;
     // 目录拉取共用一个后台线程, 避免每次 FetchFileListTask 新建一个从不 shutdown 的 executor 泄漏线程
     private final ExecutorService fetchExecutor = Executors.newSingleThreadExecutor();
@@ -51,8 +52,23 @@ public class MainActivity extends AppCompatActivity {
         show_version();
         updater = new AppUpdater(this);
         updater.checkOnLaunch();
+        // 后台建索引时把进度并进右上角版本号那行小字
+        IndexCrawler.setListener((built, running) -> runOnUiThread(() -> {
+            if (isDestroyed()) {
+                return;
+            }
+            android.widget.TextView v = findViewById(R.id.versionText);
+            v.setText(running ? versionName + "  ·  " + getString(R.string.indexing, built) : versionName);
+        }));
         // 延迟启动后台索引爬取, 避开首屏封面加载抢网络
         new Handler(Looper.getMainLooper()).postDelayed(() -> IndexCrawler.start(this), 8000);
+    }
+
+    @Override
+    protected void onDestroy() {
+        IndexCrawler.setListener(null);
+        fetchExecutor.shutdownNow();
+        super.onDestroy();
     }
 
     public void setup_file_list() {
@@ -397,14 +413,15 @@ public class MainActivity extends AppCompatActivity {
     }
 
 
-    // 主界面右上角小字显示版本号 (CI 构建时 versionName = tag 名, 本地是 dev)
+    // 主界面右上角小字显示版本号 (CI 构建时 versionName = tag 名, 本地是 dev); 后台建索引时也借这行显示进度
     private void show_version() {
-        android.widget.TextView v = findViewById(R.id.versionText);
         try {
-            v.setText(getPackageManager().getPackageInfo(getPackageName(), 0).versionName);
+            versionName = getPackageManager().getPackageInfo(getPackageName(), 0).versionName;
         } catch (Exception e) {
-            v.setText("");
+            versionName = "";
         }
+        android.widget.TextView v = findViewById(R.id.versionText);
+        v.setText(versionName);
     }
 
     public void init_resource_list() {
@@ -437,11 +454,6 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @Override
-    protected void onDestroy() {
-        fetchExecutor.shutdownNow();
-        super.onDestroy();
-    }
 
     // menu 键(或长按OK): 书切换小说/漫画, 数据源编辑/删除, 最近阅读切换/移除; 没聚焦可操作项时显示帮助;
     // config/设置键 = 对聚焦的书删索引

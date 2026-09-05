@@ -93,6 +93,11 @@ public class SmbResource implements ResourceInterface {
     }
 
     @Override
+    public long size(String uri) throws Exception {
+        return new SmbFile(baseUrl + uri, ctx()).length();
+    }
+
+    @Override
     public byte[] open(String uri, Slice slice) throws Exception {
         var slices = new ArrayList<Slice>();
         slices.add(slice);
