@@ -1,6 +1,7 @@
 package com.github.mmooyyii.malguem;
 
 import android.annotation.SuppressLint;
+import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -35,6 +36,15 @@ public class NovelActivity extends AppCompatActivity {
     int epub_book_page;
     int resource_id;
     String book_uri;
+    boolean dark; // 夜间模式, 全局设置
+
+    // 注入的夜间样式: 全部 !important, 不管 epub 自带 css 在前在后都能盖住; 图片稍调暗
+    private static final String DARK_CSS = "<style>"
+            + "html,body{background:#121212 !important;color:#c9c9c9 !important}"
+            + "body *{background-color:transparent !important;color:#c9c9c9 !important;border-color:#3a3a3a !important}"
+            + "a{color:#8ab4f8 !important}"
+            + "img,svg,video{opacity:0.85}"
+            + "</style>";
 
     ResourceInterface client;
 
@@ -58,6 +68,8 @@ public class NovelActivity extends AppCompatActivity {
         webSettings.setUseWideViewPort(false);
         webSettings.setJavaScriptEnabled(true);
         webSettings.setTextZoom(getSharedPreferences("settings", MODE_PRIVATE).getInt("novel_text_zoom", 100));
+        dark = getSharedPreferences("settings", MODE_PRIVATE).getBoolean("novel_dark", false);
+        applyBackground();
         novelView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
 
         var intent = getIntent();
@@ -89,9 +101,17 @@ public class NovelActivity extends AppCompatActivity {
         // 在 onPause 保存进度, 覆盖 HOME 键/进程回收等非返回键的退出路径; 开书失败时 epub_book 为 null 则跳过
         if (epub_book != null) {
             var db = Database.getInstance(this).getDatabase();
-            db.save_history(resource_id, book_uri, epub_book.total_pages(), epub_book_page, novelView.getScrollY());
+            // 章内位置存万分比而不是像素: 字号/夜间模式会改变排版高度, 像素偏移在重排后就指错地方了
+            db.save_history(resource_id, book_uri, epub_book.total_pages(), epub_book_page, currentRatio());
         }
         super.onPause();
+    }
+
+    // 当前滚动位置的万分比 (0-10000)
+    private int currentRatio() {
+        @SuppressWarnings("deprecation")
+        int max = Math.max(1, (int) (novelView.getContentHeight() * novelView.getScale()) - novelView.getHeight());
+        return (int) (10000L * Math.max(0, Math.min(max, novelView.getScrollY())) / max);
     }
 
     @Override
@@ -126,7 +146,25 @@ public class NovelActivity extends AppCompatActivity {
         }
     }
 
+    // WebView 自身背景也变深色, 避免翻页/加载间隙白屏闪一下
+    private void applyBackground() {
+        novelView.setBackgroundColor(dark ? 0xFF121212 : 0xFFFFFFFF);
+    }
+
+    // 夜间模式把样式插到 </head> 前 (没有 head 就直接拼在最前面)
+    private String decorate(String html) {
+        if (!dark) {
+            return html;
+        }
+        int i = html.toLowerCase().indexOf("</head>");
+        if (i >= 0) {
+            return html.substring(0, i) + DARK_CSS + html.substring(i);
+        }
+        return DARK_CSS + html;
+    }
+
     public void show_new_page(String html, int page_offset) {
+        html = decorate(html);
         novelView.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
@@ -148,8 +186,11 @@ public class NovelActivity extends AppCompatActivity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                // 内容布局完成后再恢复滚动位置; 在 loadData 之前 scrollTo 会被加载重置, 恢复无效
-                view.scrollTo(0, page_offset);
+                // 内容布局完成后再恢复滚动位置; 在 loadData 之前 scrollTo 会被加载重置, 恢复无效.
+                // page_offset 是万分比, 按当前排版高度换算成像素
+                @SuppressWarnings("deprecation")
+                int max = Math.max(0, (int) (view.getContentHeight() * view.getScale()) - view.getHeight());
+                view.scrollTo(0, (int) ((long) page_offset * max / 10000));
             }
         });
         novelView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
@@ -169,6 +210,19 @@ public class NovelActivity extends AppCompatActivity {
             showReaderMenu();
             return true;
         }
+        // 上下键改为整屏翻页 (滚一屏留 10% 重叠); 忽略长按重复, 防止一秒翻几十屏
+        if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
+            if (event.getRepeatCount() == 0) {
+                scrollByScreen(1);
+            }
+            return true;
+        }
+        if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            if (event.getRepeatCount() == 0) {
+                scrollByScreen(-1);
+            }
+            return true;
+        }
         boolean page_changed = false;
         if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
             page_changed = true;
@@ -184,20 +238,49 @@ public class NovelActivity extends AppCompatActivity {
         return super.dispatchKeyEvent(event);
     }
 
+    private void scrollByScreen(int dir) {
+        int step = (int) (novelView.getHeight() * 0.9f);
+        @SuppressWarnings("deprecation")
+        int max = Math.max(0, (int) (novelView.getContentHeight() * novelView.getScale()) - novelView.getHeight());
+        int target = Math.max(0, Math.min(max, novelView.getScrollY() + dir * step));
+        novelView.scrollTo(0, target);
+    }
+
     // OK/菜单键呼出的阅读菜单
     private void showReaderMenu() {
-        String[] items = {"目录", "跳转到页", "字号"};
+        String[] items = {"目录", "跳转到页", "字号", "夜间模式: " + (dark ? "开" : "关"), "切换为漫画模式"};
         new AlertDialog.Builder(this)
                 .setItems(items, (dialog, which) -> {
                     if (which == 0) {
                         showTocDialog();
                     } else if (which == 1) {
                         showJumpDialog();
-                    } else {
+                    } else if (which == 2) {
                         showZoomDialog();
+                    } else if (which == 3) {
+                        dark = !dark;
+                        getSharedPreferences("settings", MODE_PRIVATE).edit().putBoolean("novel_dark", dark).apply();
+                        applyBackground();
+                        // 重新渲染当前页并按比例回到原位置
+                        notifyPageChanged(currentRatio());
+                    } else {
+                        switchToComic();
                     }
                 })
                 .show();
+    }
+
+    // 阅读中切换为漫画模式: 记住选择, 在同一页起 ComicActivity 顶替自己.
+    // 自己 finish 前 onPause 会先保存进度, 新 Activity 的 onCreate 在其之后, 读到的是最新页码
+    private void switchToComic() {
+        var db = Database.getInstance(this).getDatabase();
+        db.set_view_type(resource_id, book_uri, 0); // 0 = 漫画
+        var intent = new Intent(this, ComicActivity.class);
+        intent.putExtra("resource_id", resource_id);
+        intent.putExtra("book_uri", book_uri);
+        intent.putExtra("client", getIntent().getStringExtra("client"));
+        startActivity(intent);
+        finish();
     }
 
     private void showTocDialog() {
@@ -276,7 +359,10 @@ public class NovelActivity extends AppCompatActivity {
                 .setSingleChoiceItems(labels, current, (dialog, which) -> {
                     int zoom = TEXT_ZOOMS[which];
                     prefs.edit().putInt("novel_text_zoom", zoom).apply();
+                    // 先记住比例再改字号, 重新渲染后按比例回到原位置 (改字号会重排, 像素位置不可信)
+                    int ratio = currentRatio();
                     novelView.getSettings().setTextZoom(zoom);
+                    notifyPageChanged(ratio);
                     dialog.dismiss();
                 })
                 .show();
