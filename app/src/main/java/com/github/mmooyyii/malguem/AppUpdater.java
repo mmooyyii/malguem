@@ -30,10 +30,14 @@ import okhttp3.Request;
 // version.json (含 tag) 与 malguem-tv.apk, 见 release.yml.
 public class AppUpdater {
 
-    // 依次尝试的源, 每项都以 releases/latest/download/ 结尾; 镜像失效在这里换域名即可.
-    // github 与镜像在大陆无代理时经常全灭, 所以支持自定义源(长按首页"检查更新"设置),
-    // 自定义源排最前, 典型用法是指向家里 alist 的一个目录 (支持 http://user:pass@host/path/ 内联凭据)
+    // 依次尝试的源, CI 发版时把同一份资产同时发到 GitHub Pages 和 release 分支(jsDelivr 回源):
+    // 大陆无代理时 github 直连和 ghproxy 镜像经常全灭, Pages 与 jsDelivr 的 gcore/testingcf 域通常有一个能通.
+    // 另支持自定义源 (长按首页"检查更新"设置, http://user:pass@host/path/ 内联凭据), 排在所有内置源之前
     private static final String[] SOURCES = {
+            "https://mmooyyii.github.io/malguem/",
+            "https://gcore.jsdelivr.net/gh/mmooyyii/malguem@release/",
+            "https://testingcf.jsdelivr.net/gh/mmooyyii/malguem@release/",
+            "https://fastly.jsdelivr.net/gh/mmooyyii/malguem@release/",
             "https://github.com/mmooyyii/malguem/releases/latest/download/",
             "https://gh-proxy.com/https://github.com/mmooyyii/malguem/releases/latest/download/",
             "https://ghproxy.net/https://github.com/mmooyyii/malguem/releases/latest/download/",

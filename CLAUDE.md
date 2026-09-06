@@ -19,9 +19,9 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
 
 ## 发版与应用内 OTA 更新
 
-发版流程: commit → 打 `v` 开头的 tag (如 `v1.5.0`) → push tag → GitHub Actions 构建签名 APK 并创建 Release
-→ **把 Release 的 malguem-tv.apk 与 version.json PUT 同步到主人家里 alist 的更新目录** (大陆无代理连不上 github
-与镜像, 电视靠 app 内配置的自定义更新源从内网 alist 拉包; alist 地址与凭据在本机会话记忆里, 不入库).
+发版流程: commit → 打 `v` 开头的 tag (如 `v1.5.0`) → push tag → GitHub Actions 构建签名 APK, 创建 Release,
+并自动把 malguem-tv.apk + version.json 发布到 GitHub Pages 与 release 分支 (jsDelivr 回源) —— 全程无手动步骤.
+电视端更新源依次尝试: Pages → jsDelivr 三个域 → github → ghproxy 镜像 (大陆无代理时前几个通常有一个能通).
 电视上用首页的"检查更新"按钮拉新版, 长按该按钮可设置自定义更新源 (主人要求不做隐式自动检查).
 
 - `versionName` = tag 名, `versionCode` = CI run_number, 由 release.yml 的 env 注入; 本地构建默认 `dev`/1

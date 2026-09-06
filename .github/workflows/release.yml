@@ -11,6 +11,12 @@ jobs:
 
     permissions:
       contents: write
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
 
     steps:
       - uses: actions/checkout@v4
@@ -59,3 +65,37 @@ jobs:
         with:
           files: release/*
           generate_release_notes: true
+
+      # ---- 大陆更新源: 同一份资产同时发到 GitHub Pages 与 release 分支(jsDelivr 回源), 电视端多源依次试 ----
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: release
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Publish to release branch
+        # app 内置 jsDelivr 多域名源回源这个分支拉更新.
+        # 孤儿单提交强推, 分支永远只有最新一版, 仓库不膨胀
+        run: |
+          cd release
+          git init -b release
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "release ${GITHUB_REF_NAME}"
+          git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" release:release
+
+      - name: Purge jsDelivr cache
+        # @branch 的 URL 有边缘缓存, 主动 purge 让新版本尽快可见 (失败不影响发版)
+        run: |
+          curl -s -m 30 "https://purge.jsdelivr.net/gh/${{ github.repository }}@release/version.json" || true
+          curl -s -m 30 "https://purge.jsdelivr.net/gh/${{ github.repository }}@release/malguem-tv.apk" || true
