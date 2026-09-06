@@ -38,6 +38,8 @@ public class ComicActivity extends AppCompatActivity {
 
     private WebView ComicViewLeft;
     private WebView ComicViewRight;
+    private SmoothScroller leftScroller;
+    private SmoothScroller rightScroller;
 
     private TextView pageView;
     private android.widget.ProgressBar pageLoading;
@@ -60,7 +62,9 @@ public class ComicActivity extends AppCompatActivity {
         pageView = findViewById(R.id.pageNumberTextView);
         pageLoading = findViewById(R.id.pageLoading);
         ComicViewLeft = findViewById(R.id.comicLeft);
+        leftScroller = new SmoothScroller(ComicViewLeft);
         ComicViewRight = findViewById(R.id.comicRight);
+        rightScroller = new SmoothScroller(ComicViewRight);
         var webSettings = ComicViewLeft.getSettings();
         webSettings.setLoadWithOverviewMode(true);
         webSettings.setAllowFileAccess(true);
@@ -133,6 +137,9 @@ public class ComicActivity extends AppCompatActivity {
     protected void onDestroy() {
         executor.shutdownNow();
         loadExecutor.shutdownNow();
+        // 先停动画再销毁 WebView, 避免动画回调摸已销毁的 view
+        leftScroller.cancel();
+        rightScroller.cancel();
         // 规范销毁 WebView 以释放其 native 内存 (取代原来独立进程+killProcess 的做法)
         destroyWebView(ComicViewLeft);
         destroyWebView(ComicViewRight);
@@ -191,6 +198,28 @@ public class ComicActivity extends AppCompatActivity {
             showReaderMenu();
             return true;
         }
+        // 上下键: 短按平滑滚一屏, 长按匀速巡航, 松手滑停; 栏内到头再按则切到另一栏
+        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            int dir = keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : -1;
+            var focused = (!single && ComicViewRight.hasFocus()) ? ComicViewRight : ComicViewLeft;
+            var scroller = focused == ComicViewRight ? rightScroller : leftScroller;
+            if (action == KeyEvent.ACTION_DOWN) {
+                if (event.getRepeatCount() == 0) {
+                    if (focused.canScrollVertically(dir)) {
+                        scroller.pageScroll(dir);
+                    } else {
+                        switchColumn(focused, dir);
+                    }
+                } else {
+                    scroller.startCruise(dir);
+                }
+            } else if (action == KeyEvent.ACTION_UP) {
+                // 长按期间焦点可能已被滚动监听切到另一栏, 两个都停
+                leftScroller.stopCruise();
+                rightScroller.stopCruise();
+            }
+            return true;
+        }
         if (action == KeyEvent.ACTION_DOWN
                 && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
             // rtl 时页序从右往左, 左键是前进; 单页模式一次走 1 页
@@ -205,6 +234,20 @@ public class ComicActivity extends AppCompatActivity {
             return true;
         }
         return super.dispatchKeyEvent(event);
+    }
+
+    // 栏内滚到头再按方向键: 按阅读顺序切到另一栏 (rtl 时先读栏是右栏); 单页模式没有第二栏
+    private void switchColumn(WebView focused, int dir) {
+        if (single) {
+            return;
+        }
+        var first = rtl ? ComicViewRight : ComicViewLeft;
+        var second = rtl ? ComicViewLeft : ComicViewRight;
+        if (dir > 0 && focused == first) {
+            second.requestFocus();
+        } else if (dir < 0 && focused == second) {
+            first.requestFocus();
+        }
     }
 
     // OK/菜单键呼出的阅读菜单
@@ -316,6 +359,9 @@ public class ComicActivity extends AppCompatActivity {
         epub_book_page = firstPage;
         final boolean two = !single;
         final int secondPage = firstPage + 1;
+        // 翻页时停掉栏内滚动动画, 别和新页渲染打架
+        leftScroller.cancel();
+        rightScroller.cancel();
         // 页面图片要从网络拉时会卡一下, 转个圈让人知道在加载 (调用方都在主线程)
         pageLoading.setVisibility(View.VISIBLE);
         // 丢弃还在排队的过时预取区间, 把带宽让给当前页 (预取和当前页共享 WebDAV 连接池,

@@ -33,6 +33,7 @@ public class NovelActivity extends AppCompatActivity {
     private WebView novelView;
     private TextView pageView;
     private android.widget.ProgressBar pageLoading;
+    private SmoothScroller scroller;
     Book epub_book;
     int epub_book_page;
     int resource_id;
@@ -64,6 +65,7 @@ public class NovelActivity extends AppCompatActivity {
         pageView = findViewById(R.id.pageNumberTextView);
         pageLoading = findViewById(R.id.pageLoading);
         novelView = findViewById(R.id.webView);
+        scroller = new SmoothScroller(novelView);
         var webSettings = novelView.getSettings();
         webSettings.setAllowFileAccess(true);
         webSettings.setAllowContentAccess(true);
@@ -120,6 +122,7 @@ public class NovelActivity extends AppCompatActivity {
     protected void onDestroy() {
         executor.shutdownNow();
         loadExecutor.shutdownNow();
+        scroller.cancel(); // 先停动画再销毁 WebView, 避免动画回调摸已销毁的 view
         // 规范销毁 WebView 以释放其 native 内存 (取代原来独立进程+killProcess 的做法)
         destroyWebView(novelView);
         super.onDestroy();
@@ -212,16 +215,17 @@ public class NovelActivity extends AppCompatActivity {
             showReaderMenu();
             return true;
         }
-        // 上下键改为整屏翻页 (滚一屏留 10% 重叠); 忽略长按重复, 防止一秒翻几十屏
-        if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_DOWN) {
-            if (event.getRepeatCount() == 0) {
-                scrollByScreen(1);
-            }
-            return true;
-        }
-        if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_UP) {
-            if (event.getRepeatCount() == 0) {
-                scrollByScreen(-1);
+        // 上下键: 短按平滑滚一屏 (留 10% 重叠, 减速曲线); 长按进入匀速巡航, 松手滑行减速停下
+        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+            int dir = keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : -1;
+            if (action == KeyEvent.ACTION_DOWN) {
+                if (event.getRepeatCount() == 0) {
+                    scroller.pageScroll(dir);
+                } else {
+                    scroller.startCruise(dir);
+                }
+            } else if (action == KeyEvent.ACTION_UP) {
+                scroller.stopCruise();
             }
             return true;
         }
@@ -240,13 +244,6 @@ public class NovelActivity extends AppCompatActivity {
         return super.dispatchKeyEvent(event);
     }
 
-    private void scrollByScreen(int dir) {
-        int step = (int) (novelView.getHeight() * 0.9f);
-        @SuppressWarnings("deprecation")
-        int max = Math.max(0, (int) (novelView.getContentHeight() * novelView.getScale()) - novelView.getHeight());
-        int target = Math.max(0, Math.min(max, novelView.getScrollY() + dir * step));
-        novelView.scrollTo(0, target);
-    }
 
     // OK/菜单键呼出的阅读菜单
     private void showReaderMenu() {
@@ -380,6 +377,8 @@ public class NovelActivity extends AppCompatActivity {
         final int total = epub_book.total_pages();
         final int page = Math.max(0, Math.min(epub_book_page, total - 1));
         epub_book_page = page;
+        // 换章时停掉滚动动画, 别和新页的位置恢复打架
+        scroller.cancel();
         // 章节要从网络拉时会卡一下, 转个圈让人知道在加载 (调用方都在主线程)
         pageLoading.setVisibility(android.view.View.VISIBLE);
         // 丢弃排队中的过时预取区间, 把带宽让给当前章 (同 ComicActivity)
