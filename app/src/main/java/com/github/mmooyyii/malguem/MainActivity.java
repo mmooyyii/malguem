@@ -535,7 +535,29 @@ public class MainActivity extends AppCompatActivity {
             showRecentMenu(item);
             return true;
         }
+        if (item.type == ListItem.FileType.CheckUpdate) {
+            showUpdateSourceDialog();
+            return true;
+        }
         return false;
+    }
+
+    // 自定义更新源: 大陆无代理时 github 与镜像全灭, 指到家里 alist 之类的内网 http 目录最稳.
+    // 目录下需有 malguem-tv.apk 与 version.json, 支持 http://user:pass@host/path/ 内联凭据
+    private void showUpdateSourceDialog() {
+        View dialogView = getLayoutInflater().inflate(R.layout.dialog_update_source, null);
+        final EditText etUrl = dialogView.findViewById(R.id.et_url);
+        var prefs = getSharedPreferences("settings", MODE_PRIVATE);
+        etUrl.setText(prefs.getString("update_source", ""));
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.update_source_title)
+                .setView(dialogView)
+                .setPositiveButton(R.string.ok_save, (dialog, which) -> {
+                    prefs.edit().putString("update_source", etUrl.getText().toString().trim()).apply();
+                    Toast.makeText(this, R.string.save_ok, Toast.LENGTH_SHORT).show();
+                })
+                .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
+                .show();
     }
 
     private void showResourceMenu(ListItem item) {

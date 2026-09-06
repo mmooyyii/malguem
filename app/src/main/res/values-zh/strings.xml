@@ -58,6 +58,8 @@
     <string name="help_keys">按键说明:\n· 菜单键 / 长按OK — 书: 切换漫画/小说; 数据源: 编辑/删除; 最近阅读: 切换/移除\n· 设置键 — 删除聚焦那本书的索引与封面\n· 阅读中按OK — 目录 / 跳页 / 字号 / 夜间 / 阅读方向 / 单页</string>
     <string name="help_cache">缓存:\n封面 %1$d 张, %2$s\n索引 %3$d 本, %4$s\n更新包 %5$s</string>
     <string name="check_update">检查更新</string>
+    <string name="update_source_title">自定义更新源</string>
+    <string name="update_source_label">含 malguem-tv.apk 与 version.json 的目录地址 (优先使用; 留空走默认源)</string>
     <string name="clear_cache">清空缓存</string>
     <string name="cleared">已清理 %1$s</string>
     <string name="press_back_again">再按一次返回退出</string>

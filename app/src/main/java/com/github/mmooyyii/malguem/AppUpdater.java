@@ -30,7 +30,9 @@ import okhttp3.Request;
 // version.json (含 tag) 与 malguem-tv.apk, 见 release.yml.
 public class AppUpdater {
 
-    // 依次尝试的源, 每项都以 releases/latest/download/ 结尾; 镜像失效在这里换域名即可
+    // 依次尝试的源, 每项都以 releases/latest/download/ 结尾; 镜像失效在这里换域名即可.
+    // github 与镜像在大陆无代理时经常全灭, 所以支持自定义源(长按首页"检查更新"设置),
+    // 自定义源排最前, 典型用法是指向家里 alist 的一个目录 (支持 http://user:pass@host/path/ 内联凭据)
     private static final String[] SOURCES = {
             "https://github.com/mmooyyii/malguem/releases/latest/download/",
             "https://gh-proxy.com/https://github.com/mmooyyii/malguem/releases/latest/download/",
@@ -87,11 +89,37 @@ public class AppUpdater {
         }).start();
     }
 
+    // 自定义源在前 + 内置源; 自定义源存 SharedPreferences, 空则只有内置
+    private java.util.List<String> sources() {
+        var list = new java.util.ArrayList<String>();
+        var custom = activity.getSharedPreferences("settings", android.content.Context.MODE_PRIVATE)
+                .getString("update_source", "").trim();
+        if (!custom.isEmpty()) {
+            list.add(custom.endsWith("/") ? custom : custom + "/");
+        }
+        java.util.Collections.addAll(list, SOURCES);
+        return list;
+    }
+
+    // 支持 URL 内联凭据 (http://user:pass@host/...): okhttp 不会自动发 Basic 头, 这里拆出来自己加
+    private Request buildGet(String url) {
+        var b = new Request.Builder();
+        var hu = okhttp3.HttpUrl.parse(url);
+        if (hu != null && !hu.username().isEmpty()) {
+            b.addHeader("Authorization", okhttp3.Credentials.basic(hu.username(), hu.password()));
+            b.url(hu.newBuilder().username("").password("").build());
+        } else {
+            b.url(url);
+        }
+        return b.build();
+    }
+
     // 依次尝试各源拉取 version.json, 成功的源记入 goodSource 供下载复用; 全失败返回 null
     private Manifest fetchManifest() {
-        for (var i = 0; i < SOURCES.length; i++) {
+        var list = sources();
+        for (var i = 0; i < list.size(); i++) {
             try {
-                var request = new Request.Builder().url(SOURCES[i] + "version.json").build();
+                var request = buildGet(list.get(i) + "version.json");
                 try (var response = client.newCall(request).execute()) {
                     if (!response.isSuccessful() || response.body() == null) {
                         continue;
@@ -140,8 +168,9 @@ public class AppUpdater {
         new Thread(() -> {
             Exception last = null;
             // 从检查阶段验证过的源开始, 失败换下一个
-            for (var step = 0; step < SOURCES.length; step++) {
-                var base = SOURCES[(goodSource + step) % SOURCES.length];
+            var list = sources();
+            for (var step = 0; step < list.size(); step++) {
+                var base = list.get((goodSource + step) % list.size());
                 try {
                     downloadFrom(base, tag, dialog);
                     return;
@@ -163,7 +192,7 @@ public class AppUpdater {
 
     // 从单个源下载到 cache/updates, 校验完整性, 失败抛异常由调用方换源重试
     private void downloadFrom(String base, String tag, AlertDialog dialog) throws Exception {
-        var request = new Request.Builder().url(base + "malguem-tv.apk").build();
+        var request = buildGet(base + "malguem-tv.apk");
         try (var response = client.newCall(request).execute()) {
             if (!response.isSuccessful() || response.body() == null) {
                 throw new IllegalStateException("http " + response.code());

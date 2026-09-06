@@ -67,6 +67,8 @@
     <string name="help_keys">Keys:\n· MENU / long-press OK — book: switch comic/novel; source: edit/delete; recents: switch/remove\n· SETTINGS — delete the focused book\'s index and cover\n· OK while reading — contents / go to page / font size / dark mode / direction / single page</string>
     <string name="help_cache">Cache:\nCovers %1$d, %2$s\nIndexes %3$d, %4$s\nUpdates %5$s</string>
     <string name="check_update">Check updates</string>
+    <string name="update_source_title">Custom update source</string>
+    <string name="update_source_label">Folder URL with malguem-tv.apk + version.json (tried first; empty = defaults)</string>
     <string name="clear_cache">Clear cache</string>
     <string name="cleared">Cleared %1$s</string>
     <string name="press_back_again">Press BACK again to exit</string>
