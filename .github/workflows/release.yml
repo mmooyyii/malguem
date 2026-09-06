@@ -66,21 +66,7 @@ jobs:
           files: release/*
           generate_release_notes: true
 
-      # ---- 大陆更新源: 同一份资产同时发到 GitHub Pages 与 release 分支(jsDelivr 回源), 电视端多源依次试 ----
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
-      - name: Upload pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: release
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      # ---- 大陆更新源: 同一份资产发到 release 分支(jsDelivr 回源) 与 GitHub Pages, 电视端多源依次试 ----
 
       - name: Publish to release branch
         # app 内置 jsDelivr 多域名源回源这个分支拉更新.
@@ -99,3 +85,20 @@ jobs:
         run: |
           curl -s -m 30 "https://purge.jsdelivr.net/gh/${{ github.repository }}@release/version.json" || true
           curl -s -m 30 "https://purge.jsdelivr.net/gh/${{ github.repository }}@release/malguem-tv.apk" || true
+
+      # Pages 三步失败不阻塞 (自动开启 Pages 需要仓库管理权限, GITHUB_TOKEN 没有;
+      # 需在仓库 Settings -> Pages 把 Source 设为 GitHub Actions 一次, 之后自动生效)
+      - name: Setup Pages
+        continue-on-error: true
+        uses: actions/configure-pages@v5
+
+      - name: Upload pages artifact
+        continue-on-error: true
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: release
+
+      - name: Deploy to GitHub Pages
+        continue-on-error: true
+        id: deployment
+        uses: actions/deploy-pages@v4
