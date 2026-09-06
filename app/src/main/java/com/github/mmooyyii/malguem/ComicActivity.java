@@ -48,6 +48,7 @@ public class ComicActivity extends AppCompatActivity {
     int resource_id;
     boolean rtl; // 从右到左阅读(日漫): 先读右栏再读左栏, 左键前进; 按书存在 epub 表
     boolean single; // 单页模式: 一屏只放一页 (跨页大图/横版漫画用); 按书存在 epub 表
+    ComicLayout layout = new ComicLayout(); // 布局配置 (适配/边距/背景/错位/页码), 按书存 epub.layout_json
 
     String book_uri;
 
@@ -160,7 +161,59 @@ public class ComicActivity extends AppCompatActivity {
         view.destroy();
     }
 
+    // 应用布局配置: 边距/背景/页码可见性 (适配方式与错位在渲染时生效); 打开成功与配置变更时调用
+    private void applyLayout() {
+        float d = getResources().getDisplayMetrics().density;
+        final int outer;
+        final int gap; // 半个中缝
+        if (layout.margin == 0) {
+            outer = (int) (8 * d);
+            gap = (int) (4 * d);
+        } else if (layout.margin == 2) {
+            outer = (int) (48 * d);
+            gap = (int) (32 * d);
+        } else {
+            outer = (int) (24 * d);
+            gap = (int) (12 * d);
+        }
+        var lp = (ViewGroup.MarginLayoutParams) ComicViewLeft.getLayoutParams();
+        lp.setMarginStart(outer);
+        lp.setMarginEnd(single ? outer : gap);
+        ComicViewLeft.setLayoutParams(lp);
+        var rp = (ViewGroup.MarginLayoutParams) ComicViewRight.getLayoutParams();
+        rp.setMarginStart(gap);
+        rp.setMarginEnd(outer);
+        ComicViewRight.setLayoutParams(rp);
+        int bg = layout.bg == 2 ? 0xFF000000 : layout.bg == 1 ? 0xFF1E1E1E : 0xFFF5F0E6;
+        findViewById(R.id.comicRoot).setBackgroundColor(bg);
+        ComicViewLeft.setBackgroundColor(bg);
+        ComicViewRight.setBackgroundColor(bg);
+        pageView.setVisibility(layout.hidePage ? View.GONE : View.VISIBLE);
+    }
+
+    // 按布局配置注入样式: 背景色所有模式都注入 (盖过书内白底); 适应整页时加视口与尺寸约束把图片限制在一屏内
+    private String decorate(String html) {
+        String bg = layout.bg == 2 ? "#000000" : layout.bg == 1 ? "#1e1e1e" : "#f5f0e6";
+        var head = new StringBuilder();
+        if (layout.fit == 1) {
+            head.append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>");
+        }
+        head.append("<style>html,body{background:").append(bg).append(" !important}");
+        if (layout.fit == 1) {
+            head.append("body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh}")
+                    .append("img,image{max-width:100% !important;max-height:100vh !important;width:auto !important;height:auto !important}")
+                    .append("svg{width:100% !important;height:100vh !important}");
+        }
+        head.append("</style>");
+        int i = html.toLowerCase().indexOf("</head>");
+        if (i >= 0) {
+            return html.substring(0, i) + head + html.substring(i);
+        }
+        return head + html;
+    }
+
     public void show_new_page(WebView view, String html) {
+        html = decorate(html);
         view.scrollTo(0, 0);
         view.setWebViewClient(new WebViewClient() {
             @Override
@@ -257,6 +310,7 @@ public class ComicActivity extends AppCompatActivity {
                 getString(R.string.menu_jump),
                 getString(R.string.menu_direction, getString(rtl ? R.string.dir_rtl : R.string.dir_ltr)),
                 getString(R.string.menu_single, getString(single ? R.string.on : R.string.off)),
+                getString(R.string.menu_layout),
                 getString(R.string.menu_to_novel),
         };
         new AlertDialog.Builder(this)
@@ -274,11 +328,49 @@ public class ComicActivity extends AppCompatActivity {
                     } else if (which == 3) {
                         single = !single;
                         db.set_single_page(resource_id, book_uri, single);
+                        applyLayout();
                         notifyPageChanged();
+                    } else if (which == 4) {
+                        showLayoutMenu();
                     } else {
                         switchToNovel();
                     }
                 })
+                .show();
+    }
+
+    // 布局设置二级菜单: 点一项就轮换它的值, 立即生效并落库, 然后重开菜单便于连续调整
+    private void showLayoutMenu() {
+        String[] items = {
+                getString(R.string.layout_fit, getString(layout.fit == 1 ? R.string.fit_page : R.string.fit_width)),
+                getString(R.string.layout_margin, getString(layout.margin == 0 ? R.string.margin_tight
+                        : layout.margin == 2 ? R.string.margin_loose : R.string.margin_normal)),
+                getString(R.string.layout_bg, getString(layout.bg == 2 ? R.string.bg_black
+                        : layout.bg == 1 ? R.string.bg_gray : R.string.bg_paper)),
+                getString(R.string.layout_shift, getString(layout.shift ? R.string.on : R.string.off)),
+                getString(R.string.layout_page_num, getString(layout.hidePage ? R.string.off : R.string.on)),
+        };
+        new AlertDialog.Builder(this)
+                .setTitle(R.string.menu_layout)
+                .setItems(items, (dialog, which) -> {
+                    if (which == 0) {
+                        layout.fit = layout.fit == 1 ? 0 : 1;
+                    } else if (which == 1) {
+                        layout.margin = (layout.margin + 1) % 3;
+                    } else if (which == 2) {
+                        layout.bg = (layout.bg + 1) % 3;
+                    } else if (which == 3) {
+                        layout.shift = !layout.shift;
+                    } else {
+                        layout.hidePage = !layout.hidePage;
+                    }
+                    var db = Database.getInstance(this).getDatabase();
+                    db.set_layout(resource_id, book_uri, layout.to_json());
+                    applyLayout();
+                    notifyPageChanged();
+                    showLayoutMenu();
+                })
+                .setNegativeButton(R.string.close, null)
                 .show();
     }
 
@@ -355,9 +447,16 @@ public class ComicActivity extends AppCompatActivity {
 
     private void notifyPageChanged() {
         final int total = epub_book.total_pages();
-        final int firstPage = Math.max(0, Math.min(epub_book_page, total - 1));
+        int p = Math.max(0, Math.min(epub_book_page, total - 1));
+        // 对页对齐: 错位修正开启时第 1 页单独成屏, 配对从第 2 页开始 (跨页图才能拼到同一屏)
+        if (!single && total > 0) {
+            int parity = layout.shift ? 1 : 0;
+            p = p < parity ? 0 : p - ((p - parity) % 2);
+        }
+        final int firstPage = p;
         epub_book_page = firstPage;
-        final boolean two = !single;
+        final boolean lonelyCover = !single && layout.shift && firstPage == 0;
+        final boolean two = !single && !lonelyCover;
         final int secondPage = firstPage + 1;
         // 翻页时停掉栏内滚动动画, 别和新页渲染打架
         leftScroller.cancel();
@@ -450,6 +549,7 @@ public class ComicActivity extends AppCompatActivity {
                             return; // 活动已销毁时窗口已被系统回收, 再 dismiss 会抛 View not attached
                         }
                         progressDialog.dismiss();
+                        applyLayout();
                         notifyPageChanged();
                     });
                 } catch (Exception e) {
@@ -475,6 +575,7 @@ public class ComicActivity extends AppCompatActivity {
             epub_book_page = info.current_page;
             rtl = info.rtl;
             single = info.single_page;
+            layout = ComicLayout.from_json(info.layout_json);
         }
     }
 }

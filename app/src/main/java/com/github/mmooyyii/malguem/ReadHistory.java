@@ -11,4 +11,6 @@ public class ReadHistory {
     public boolean rtl; // 漫画从右到左阅读(日漫)
 
     public boolean single_page; // 漫画单页模式(一屏一页, 跨页大图用)
+
+    public String layout_json = ""; // 漫画布局配置 json, 见 ComicLayout
 }

@@ -36,7 +36,7 @@ public class Database {
 
         // 数据库名称和版本
         private static final String DATABASE_NAME = "malguem.db";
-        private static final int DATABASE_VERSION = 6;
+        private static final int DATABASE_VERSION = 7;
 
         // 创建表的 SQL 语句
         private static final String RESOURCE_TABLE = "CREATE TABLE resource (id INTEGER PRIMARY KEY, name TEXT NOT NULL, resource_type INTEGER NOT NULL, json_info TEXT NOT NULL);";
@@ -44,7 +44,7 @@ public class Database {
         // rtl: 漫画从右到左阅读(日漫); single_page: 漫画单页模式; 都按书保存.
         // last_read: 最近一次阅读的毫秒时间戳, 首页"最近阅读"按它排序.
         // page_offset: 小说章内滚动位置, 存 0-10000 的万分比而不是像素 —— 字号/夜间模式会改变排版高度, 按比例才能对得上
-        private static final String EPUB_TABLE = "CREATE TABLE epub (resource_id INTEGER NOT NULL,path TEXT NOT NULL, total_page INTEGER NOT NULL default 0, current_page INTEGER NOT NULL default 0, page_offset INTEGER NOT NULL default 0, view_type INTEGER NOT NULL default 0, rtl INTEGER NOT NULL default 0, last_read INTEGER NOT NULL default 0, single_page INTEGER NOT NULL default 0, PRIMARY KEY (resource_id, path));";
+        private static final String EPUB_TABLE = "CREATE TABLE epub (resource_id INTEGER NOT NULL,path TEXT NOT NULL, total_page INTEGER NOT NULL default 0, current_page INTEGER NOT NULL default 0, page_offset INTEGER NOT NULL default 0, view_type INTEGER NOT NULL default 0, rtl INTEGER NOT NULL default 0, last_read INTEGER NOT NULL default 0, single_page INTEGER NOT NULL default 0, layout_json TEXT NOT NULL default '', PRIMARY KEY (resource_id, path));";
 
         // epub 索引缓存: 中央目录 + opf 解析结果, 免掉开书/加载封面时的元数据网络往返.
         // namespace 是数据源配置的 json(区分不同服务器/账号), path 是包内路径, 一起做主键; 不做内容失效
@@ -89,6 +89,10 @@ public class Database {
             if (oldVersion < 6) {
                 // v6 page_offset 语义从像素改为万分比, 旧像素值无法换算, 一次性清零 (只丢章内位置, 章节进度保留)
                 db.execSQL("update epub set page_offset = 0");
+            }
+            if (oldVersion < 7) {
+                // v7 新增漫画布局配置 json (以后布局类配置都进这一列, 不再逐项加列)
+                db.execSQL("ALTER TABLE epub ADD COLUMN layout_json TEXT NOT NULL default ''");
             }
         }
 
@@ -185,6 +189,14 @@ public class Database {
             cur.update("epub", values, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path});
         }
 
+        public void set_layout(int resource_id, String path, String layout_json) {
+            init_epub(resource_id, path);
+            var cur = getWritableDatabase();
+            ContentValues values = new ContentValues();
+            values.put("layout_json", layout_json);
+            cur.update("epub", values, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path});
+        }
+
         public void set_rtl(int resource_id, String path, boolean rtl) {
             init_epub(resource_id, path);
             var cur = getWritableDatabase();
@@ -224,12 +236,13 @@ public class Database {
         public ReadHistory get_epub_info(int resource_id, String path) {
             var output = new ReadHistory();
             var db = getReadableDatabase();
-            var cursor = db.query("epub", new String[]{"current_page", "page_offset", "view_type", "rtl", "single_page"}, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path}, null, null, null);
+            var cursor = db.query("epub", new String[]{"current_page", "page_offset", "view_type", "rtl", "single_page", "layout_json"}, "resource_id=? and path=?", new String[]{String.valueOf(resource_id), path}, null, null, null);
             if (cursor.moveToNext()) {
                 output.current_page = cursor.getInt(cursor.getColumnIndexOrThrow("current_page"));
                 output.page_offset = cursor.getInt(cursor.getColumnIndexOrThrow("page_offset"));
                 output.rtl = cursor.getInt(cursor.getColumnIndexOrThrow("rtl")) == 1;
                 output.single_page = cursor.getInt(cursor.getColumnIndexOrThrow("single_page")) == 1;
+                output.layout_json = cursor.getString(cursor.getColumnIndexOrThrow("layout_json"));
                 var type = cursor.getInt(cursor.getColumnIndexOrThrow("view_type"));
                 if (type == 0) {
                     output.view_type = ListItem.ViewType.Comic;

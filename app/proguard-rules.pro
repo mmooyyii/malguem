@@ -4,6 +4,7 @@
 -keepclassmembers class com.github.mmooyyii.malguem.LazyEpub$IndexEntry { <fields>; }
 -keepclassmembers class com.github.mmooyyii.malguem.LazyEpub$TocItem { <fields>; }
 -keepclassmembers class com.github.mmooyyii.malguem.AppUpdater$Manifest { <fields>; }
+-keepclassmembers class com.github.mmooyyii.malguem.ComicLayout { <fields>; }
 
 # Gson 泛型 TypeToken 需要保留签名信息.
 # 注意 gson 2.10.1 不带 consumer 规则, R8 full mode 会剥掉 TypeToken 匿名子类的泛型签名 —
