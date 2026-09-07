@@ -21,6 +21,7 @@ public class FileListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
 
     private static final int TYPE_ITEM = 0;
     private static final int TYPE_HEADER = 1;
+    private static final int TYPE_TOOL = 2;
 
     public interface OnItemAction {
         void onClick(ListItem item);
@@ -76,7 +77,15 @@ public class FileListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
 
     @Override
     public int getItemViewType(int position) {
-        return items.get(position).type == ListItem.FileType.Header ? TYPE_HEADER : TYPE_ITEM;
+        switch (items.get(position).type) {
+            case Header:
+                return TYPE_HEADER;
+            case CheckUpdate:
+            case RebuildIndex:
+                return TYPE_TOOL;
+            default:
+                return TYPE_ITEM;
+        }
     }
 
     @NonNull
@@ -84,6 +93,9 @@ public class FileListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
     public RecyclerView.ViewHolder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
         if (viewType == TYPE_HEADER) {
             return new HeaderVH(LayoutInflater.from(context).inflate(R.layout.grid_item_header, parent, false));
+        }
+        if (viewType == TYPE_TOOL) {
+            return new ToolVH(LayoutInflater.from(context).inflate(R.layout.grid_item_tool, parent, false));
         }
         View v = LayoutInflater.from(context).inflate(R.layout.grid_item_file, parent, false);
         return new VH(v);
@@ -94,6 +106,19 @@ public class FileListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
         var item = items.get(position);
         if (holder instanceof HeaderVH) {
             ((HeaderVH) holder).title.setText(item.name);
+            return;
+        }
+        if (holder instanceof ToolVH) {
+            ToolVH t = (ToolVH) holder;
+            t.icon.setImageResource(item.type == ListItem.FileType.CheckUpdate
+                    ? R.drawable.ic_update : R.drawable.ic_reindex);
+            t.label.setText(item.name);
+            t.itemView.setOnClickListener(v -> {
+                if (action != null) {
+                    action.onClick(item);
+                }
+            });
+            t.itemView.setOnLongClickListener(v -> action != null && action.onLongClick(item));
             return;
         }
         VH h = (VH) holder;
@@ -132,18 +157,6 @@ public class FileListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
             case AddWebDav:
                 h.cover.setBackgroundResource(R.drawable.cover_add);
                 h.coverIcon.setImageResource(R.drawable.ic_add);
-                h.coverIcon.setVisibility(View.VISIBLE);
-                h.caption.setText(display);
-                break;
-            case CheckUpdate:
-                h.cover.setBackgroundResource(R.drawable.cover_tile);
-                h.coverIcon.setImageResource(R.drawable.ic_update);
-                h.coverIcon.setVisibility(View.VISIBLE);
-                h.caption.setText(display);
-                break;
-            case RebuildIndex:
-                h.cover.setBackgroundResource(R.drawable.cover_tile);
-                h.coverIcon.setImageResource(R.drawable.ic_reindex);
                 h.coverIcon.setVisibility(View.VISIBLE);
                 h.caption.setText(display);
                 break;
@@ -241,6 +254,18 @@ public class FileListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
         HeaderVH(View v) {
             super(v);
             title = (TextView) v;
+        }
+    }
+
+    // 工具区药丸按钮 (检查更新/重建索引)
+    static class ToolVH extends RecyclerView.ViewHolder {
+        final ImageView icon;
+        final TextView label;
+
+        ToolVH(View v) {
+            super(v);
+            icon = v.findViewById(R.id.toolIcon);
+            label = v.findViewById(R.id.toolLabel);
         }
     }
 

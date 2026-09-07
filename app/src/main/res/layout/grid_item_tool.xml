@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 首页工具区条目: 图标+文字的紧凑药丸, 和数据源的大封面格明显区分 -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="@dimen/card_margin"
+    android:orientation="horizontal"
+    android:gravity="center"
+    android:paddingTop="14dp"
+    android:paddingBottom="14dp"
+    android:paddingStart="16dp"
+    android:paddingEnd="16dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:defaultFocusHighlightEnabled="false"
+    android:stateListAnimator="@animator/sla_focus"
+    android:background="@drawable/tool_pill">
+
+    <ImageView
+        android:id="@+id/toolIcon"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        android:contentDescription="@null" />
+
+    <TextView
+        android:id="@+id/toolLabel"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="10dp"
+        android:textColor="@color/ink"
+        android:textSize="@dimen/text_caption"
+        android:ellipsize="end"
+        android:maxLines="1" />
+</LinearLayout>
