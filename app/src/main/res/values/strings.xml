@@ -18,6 +18,7 @@
     <!-- 首页 / 数据源 -->
     <string name="section_recent">Recents</string>
     <string name="section_sources">Sources</string>
+    <string name="section_tools">Tools</string>
     <string name="add_source">Add source</string>
     <string name="rebuild_index">Rebuild index</string>
     <string name="rebuild_started">Rebuilding index in background…</string>

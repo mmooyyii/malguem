@@ -14,6 +14,7 @@
 
     <string name="section_recent">最近阅读</string>
     <string name="section_sources">数据源</string>
+    <string name="section_tools">工具</string>
     <string name="add_source">添加数据源</string>
     <string name="rebuild_index">重建索引</string>
     <string name="rebuild_started">开始后台重建索引…</string>

@@ -453,6 +453,8 @@ public class MainActivity extends AppCompatActivity {
         list.add(new ListItem(0, getString(R.string.section_sources), ListItem.FileType.Header));
         list.addAll(sources);
         list.add(new ListItem(0, getString(R.string.add_source), ListItem.FileType.AddWebDav));
+        // 功能格子单独一个"工具"区, 不和数据源混排
+        list.add(new ListItem(0, getString(R.string.section_tools), ListItem.FileType.Header));
         list.add(new ListItem(0, getString(R.string.check_update), ListItem.FileType.CheckUpdate));
         list.add(new ListItem(0, getString(R.string.rebuild_index), ListItem.FileType.RebuildIndex));
         fileListAdapter.setClient(null);
