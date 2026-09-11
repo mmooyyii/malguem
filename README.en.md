@@ -25,7 +25,3 @@ Because of the streaming design the app makes **very frequent** range requests. 
 #### Novel mode renders regular HTML: left/right switches chapters, up/down scrolls a full screen at a time.
 
 ![](novel_mode.webp)
-
-![](盾牌格挡.webp)
-
-This project is almost entirely written by AI — I have no frontend/Android/Java background, so please forgive bugs, thread-safety issues and style crimes.
