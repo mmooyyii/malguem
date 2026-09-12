@@ -124,7 +124,6 @@
     <string name="update_now">Update</string>
     <string name="update_later">Later</string>
     <string name="downloading">Downloading %1$s</string>
-    <string name="download_failed">Download failed: %1$s</string>
     <string name="install_perm_title">Install permission required</string>
     <string name="install_perm_msg">First update needs permission to install unknown apps. Installation continues automatically after granting.</string>
     <string name="grant">Grant</string>
@@ -135,4 +134,15 @@
     <string name="err_not_found">Not found on the server. The file may have been moved or deleted.</string>
     <string name="err_http">Server error (HTTP %1$d)</string>
     <string name="err_bad_file">The file is corrupt or not a valid book.</string>
+
+    <!-- Update diagnostics: shown per source when every update source fails -->
+    <string name="download_failed_title">Download failed</string>
+    <string name="diag_dns">DNS lookup failed (poisoned or no DNS)</string>
+    <string name="diag_tls">TLS handshake failed (likely blocked)</string>
+    <string name="diag_ssl">TLS error</string>
+    <string name="diag_timeout">Timed out</string>
+    <string name="diag_refused">Connection refused</string>
+    <string name="diag_unreachable">Network unreachable</string>
+    <string name="diag_bad_json">Response is not a valid version.json</string>
+    <string name="diag_hint">The same error on every source points at DNS or the network. An HTTP code means the network works but the file is missing.</string>
 </resources>

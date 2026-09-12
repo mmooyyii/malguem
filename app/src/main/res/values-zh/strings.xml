@@ -112,7 +112,6 @@
     <string name="update_now">更新</string>
     <string name="update_later">下次再说</string>
     <string name="downloading">正在下载 %1$s</string>
-    <string name="download_failed">下载失败: %1$s</string>
     <string name="install_perm_title">需要安装权限</string>
     <string name="install_perm_msg">首次更新需要允许本应用安装未知应用, 授权后会自动继续安装</string>
     <string name="grant">去授权</string>
@@ -122,4 +121,15 @@
     <string name="err_not_found">服务器上找不到该文件/目录, 可能已被移动或删除</string>
     <string name="err_http">服务器返回错误 (HTTP %1$d)</string>
     <string name="err_bad_file">文件损坏或不是有效的电子书</string>
+
+    <!-- 更新诊断: 所有更新源都失败时, 逐源显示断在哪一环 -->
+    <string name="download_failed_title">下载失败</string>
+    <string name="diag_dns">DNS 解析失败 (域名被污染或没配 DNS)</string>
+    <string name="diag_tls">TLS 握手失败 (疑似被阻断)</string>
+    <string name="diag_ssl">TLS 错误</string>
+    <string name="diag_timeout">连接超时</string>
+    <string name="diag_refused">连接被拒绝</string>
+    <string name="diag_unreachable">网络不可达</string>
+    <string name="diag_bad_json">返回内容不是 version.json</string>
+    <string name="diag_hint">所有源同一种错误多半是 DNS 或网络问题; 出现 HTTP 码说明网络是通的, 只是文件没发布上去.</string>
 </resources>

@@ -52,11 +52,19 @@ public class AppUpdater {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final ActivityResultLauncher<Intent> unknownSourceLauncher;
     private File apkFile; // 已下载待安装的 apk
-    private int goodSource = 0; // 检查阶段验证过可用的源, 下载从它开始试
+    // 检查阶段验证过可用的源, 下载从它开始试; 检查与下载在不同线程, 要 volatile 保证可见
+    private volatile int goodSource = 0;
 
     // version.json 的内容: {"tag": "v1.2"}
     private static class Manifest {
         String tag;
+    }
+
+    // 逐源尝试的结果: manifest 非空表示拿到了版本号; 否则 failures 按源记下断在哪一环.
+    // 全灭时把每行原因摆给用户看, 不然只有一句"所有源都不可用", 没法判断是网络/DNS 还是资产没发上去
+    private static class CheckResult {
+        Manifest manifest;
+        final java.util.List<String> failures = new java.util.ArrayList<>();
     }
 
     // 必须在 Activity onCreate 期间构造 (registerForActivityResult 的限制)
@@ -76,21 +84,41 @@ public class AppUpdater {
     public void checkManually() {
         Toast.makeText(activity, R.string.checking_update, Toast.LENGTH_SHORT).show();
         new Thread(() -> {
-            var manifest = fetchManifest();
+            var result = fetchManifest();
             var current = currentVersion();
             main.post(() -> {
                 if (activity.isDestroyed()) {
                     return;
                 }
-                if (manifest == null) {
-                    Toast.makeText(activity, R.string.update_check_failed, Toast.LENGTH_LONG).show();
-                } else if (manifest.tag.equals(current)) {
+                if (result.manifest == null) {
+                    showFailures(R.string.update_check_failed, result.failures);
+                } else if (result.manifest.tag.equals(current)) {
                     Toast.makeText(activity, activity.getString(R.string.already_latest, current), Toast.LENGTH_SHORT).show();
                 } else {
-                    askAndDownload(manifest.tag, current);
+                    askAndDownload(result.manifest.tag, current);
                 }
             });
         }).start();
+    }
+
+    // 全部源失败时逐行列出 "主机名 — 原因", 电视上直接能看出是哪一环断的
+    private void showFailures(int titleRes, java.util.List<String> failures) {
+        var sb = new StringBuilder();
+        for (var f : failures) {
+            sb.append(f).append('\n');
+        }
+        sb.append('\n').append(activity.getString(R.string.diag_hint));
+        new AlertDialog.Builder(activity)
+                .setTitle(titleRes)
+                .setMessage(sb.toString())
+                .setPositiveButton(R.string.close, (d, w) -> d.dismiss())
+                .show();
+    }
+
+    // 诊断行里只放主机名, 电视屏幕摆不下完整 URL (gh-proxy 那种更是长得离谱)
+    private static String hostOf(String base) {
+        var hu = okhttp3.HttpUrl.parse(base);
+        return hu == null ? base : hu.host();
     }
 
     // 自定义源在前 + 内置源; 自定义源存 SharedPreferences, 空则只有内置
@@ -118,28 +146,35 @@ public class AppUpdater {
         return b.build();
     }
 
-    // 依次尝试各源拉取 version.json, 成功的源记入 goodSource 供下载复用; 全失败返回 null
-    private Manifest fetchManifest() {
+    // 依次尝试各源拉取 version.json, 成功的源记入 goodSource 供下载复用;
+    // 失败的源逐个记下原因 —— 以前这里把异常全吞了, 出问题只能靠猜
+    private CheckResult fetchManifest() {
+        var result = new CheckResult();
         var list = sources();
         for (var i = 0; i < list.size(); i++) {
+            var base = list.get(i);
             try {
-                var request = buildGet(list.get(i) + "version.json");
+                var request = buildGet(base + "version.json");
                 try (var response = client.newCall(request).execute()) {
                     if (!response.isSuccessful() || response.body() == null) {
-                        continue;
+                        // 抛出来让 Errors.diagnose 统一翻译成 "HTTP 404" 这类可读原因
+                        throw new HttpStatusException(response.code(), "version.json");
                     }
                     var manifest = new Gson().fromJson(response.body().string(), Manifest.class);
                     if (manifest == null || manifest.tag == null) {
+                        // 200 但内容不对: 多半是镜像/热点门户返回了自己的页面
+                        result.failures.add(hostOf(base) + " — " + activity.getString(R.string.diag_bad_json));
                         continue;
                     }
                     goodSource = i;
-                    return manifest;
+                    result.manifest = manifest;
+                    return result;
                 }
-            } catch (Exception ignore) {
-                // 这个源不通 (超时/被墙/返回错误页), 换下一个
+            } catch (Exception e) {
+                result.failures.add(hostOf(base) + " — " + Errors.diagnose(activity, e));
             }
         }
-        return null;
+        return result;
     }
 
     private String currentVersion() {
@@ -170,8 +205,8 @@ public class AppUpdater {
                 .create();
         dialog.show();
         new Thread(() -> {
-            Exception last = null;
-            // 从检查阶段验证过的源开始, 失败换下一个
+            // 从检查阶段验证过的源开始, 失败换下一个; 和检查一样逐源记原因
+            var failures = new java.util.ArrayList<String>();
             var list = sources();
             for (var step = 0; step < list.size(); step++) {
                 var base = list.get((goodSource + step) % list.size());
@@ -179,17 +214,15 @@ public class AppUpdater {
                     downloadFrom(base, tag, dialog);
                     return;
                 } catch (Exception e) {
-                    last = e;
+                    failures.add(hostOf(base) + " — " + Errors.diagnose(activity, e));
                 }
             }
-            final var err = last;
             main.post(() -> {
                 if (activity.isDestroyed()) {
                     return;
                 }
                 dialog.dismiss();
-                Toast.makeText(activity, activity.getString(R.string.download_failed,
-                        err == null ? "" : Errors.describe(activity, err)), Toast.LENGTH_LONG).show();
+                showFailures(R.string.download_failed_title, failures);
             });
         }).start();
     }
@@ -199,7 +232,7 @@ public class AppUpdater {
         var request = buildGet(base + "malguem-tv.apk");
         try (var response = client.newCall(request).execute()) {
             if (!response.isSuccessful() || response.body() == null) {
-                throw new IllegalStateException("http " + response.code());
+                throw new HttpStatusException(response.code(), "malguem-tv.apk");
             }
             var dir = new File(activity.getCacheDir(), "updates");
             //noinspection ResultOfMethodCallIgnored
@@ -211,7 +244,8 @@ public class AppUpdater {
                 var buf = new byte[64 * 1024];
                 long lastShown = -1;
                 int n;
-                while ((n = in.read(buf)) > 0) {
+                // 必须判 != -1: read 返回 0 是合法的, 用 > 0 会把下载悄悄截断成半个包
+                while ((n = in.read(buf)) != -1) {
                     fos.write(buf, 0, n);
                     done += n;
                     if (total > 0) {
@@ -220,6 +254,14 @@ public class AppUpdater {
                             lastShown = percent;
                             final var p = percent;
                             main.post(() -> dialog.setMessage(p + "%"));
+                        }
+                    } else {
+                        // 没有 Content-Length (chunked / 透明解压) 时退化成显示已下载量, 否则一直卡在 0%
+                        long mb = done / (1024 * 1024);
+                        if (mb != lastShown) {
+                            lastShown = mb;
+                            final var m = mb;
+                            main.post(() -> dialog.setMessage(m + " MB"));
                         }
                     }
                 }
