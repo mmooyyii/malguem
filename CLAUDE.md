@@ -17,6 +17,17 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
 - Android SDK 装在 `~/Library/Android/sdk` (cmdline-tools + platform-35 + build-tools;35.0.0)
 - 验证方式: 编译通过 + 真机 (没有单测框架)
 
+## APK 体积
+
+**死线 3.5MB** (主人定的). 当前约 2.0MB, 余量充足. 改依赖或打包配置后用 `:app:assembleRelease` 量一次
+(本地没 keystore 也能出未签名包, 加签名约 +8KB).
+
+- `org/bouncycastle/**` 在 `packaging.excludes` 里整体排除, 省 1.2MB —— **别加回来**.
+  jcifs 声明了 bouncycastle 依赖但实际代码路径用不到, R8 已把它的类删得一个不剩 (dex 里引用数为 0),
+  可 jar 内的 `.properties` 是资源, R8 管不着. 光 `pqc/crypto/picnic` 三张查找表就 1.21MB,
+  是后量子签名算法的表, 和 SMB 加密毫无关系, 且随机数据压不动
+- R8 full mode 已在 gradle.properties 关掉, 代价 +79KB, 换的是反射安全 (见下面 R8 那条坑)
+
 ## 发版与应用内 OTA 更新
 
 发版流程: commit → 打 `v` 开头的 tag (如 `v1.5.0`) → push tag → GitHub Actions 构建签名 APK, 创建 Release,

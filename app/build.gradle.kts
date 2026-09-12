@@ -70,7 +70,16 @@ android {
                 "META-INF/NOTICE.txt",
                 "META-INF/*.SF",
                 "META-INF/*.DSA",
-                "META-INF/*.RSA"
+                "META-INF/*.RSA",
+                // bouncycastle 的 .properties 白占 1.2MB: jcifs 声明了它, 但实际代码路径用不到,
+                // R8 已把它的类删得一个不剩 (dex 里 org/bouncycastle 引用数为 0).
+                // 类没了资源还在 —— R8 只管代码, 管不着这些 jar 内资源.
+                // 大头是 pqc/crypto/picnic 的三张查找表 (1.21MB, 后量子签名算法, 与 SMB 加密无关),
+                // 且是随机数据几乎压不动. 删它们等于砍掉 37% 的包体.
+                "org/bouncycastle/**",
+                // Kotlin 反射元数据与协程调试文件: okhttp 是 Kotlin 写的但运行时不需要它们 (没用 kotlin-reflect)
+                "kotlin/**.kotlin_builtins",
+                "DebugProbesKt.bin"
             )
         }
     }
