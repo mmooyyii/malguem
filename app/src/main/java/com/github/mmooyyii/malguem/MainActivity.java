@@ -133,7 +133,8 @@ public class MainActivity extends AppCompatActivity {
                 var db = Database.getInstance(this).getDatabase();
                 var info = db.get_epub_info(file.id, make_uri(file.name));
                 Intent intent;
-                if (info.view_type == ListItem.ViewType.Comic) {
+                // cbz 恒定走漫画模式 (库里的 view_type 可能是从别处切过来的旧值)
+                if (info.view_type == ListItem.ViewType.Comic || Books.isCbz(file.name)) {
                     intent = new Intent(MainActivity.this, ComicActivity.class);
                 } else {
                     intent = new Intent(MainActivity.this, NovelActivity.class);
@@ -154,7 +155,7 @@ public class MainActivity extends AppCompatActivity {
                     break;
                 }
                 Intent intent;
-                if (file.view_type == ListItem.ViewType.Comic) {
+                if (file.view_type == ListItem.ViewType.Comic || Books.isCbz(file.uri)) {
                     intent = new Intent(MainActivity.this, ComicActivity.class);
                 } else {
                     intent = new Intent(MainActivity.this, NovelActivity.class);
@@ -528,6 +529,11 @@ public class MainActivity extends AppCompatActivity {
             return true;
         }
         if (item.type == ListItem.FileType.Epub) {
+            // cbz 只有图片, 切小说模式没有意义
+            if (Books.isCbz(item.name)) {
+                Toast.makeText(this, R.string.comic_only, Toast.LENGTH_SHORT).show();
+                return true;
+            }
             var db = Database.getInstance(this).getDatabase();
             db.switch_view_type(item.id, item.uri != null ? item.uri : make_uri(item.name));
             new FetchFileListTask().executeTask();
@@ -604,6 +610,10 @@ public class MainActivity extends AppCompatActivity {
                 .setItems(new String[]{getString(R.string.menu_switch_view), getString(R.string.menu_remove_recent)}, (dialog, which) -> {
                     var db = Database.getInstance(this).getDatabase();
                     if (which == 0) {
+                        if (Books.isCbz(item.uri)) {
+                            Toast.makeText(this, R.string.comic_only, Toast.LENGTH_SHORT).show();
+                            return;
+                        }
                         db.switch_view_type(item.id, item.uri);
                     } else {
                         db.clear_last_read(item.id, item.uri);

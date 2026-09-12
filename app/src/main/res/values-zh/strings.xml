@@ -95,6 +95,7 @@
     <string name="switched_rtl">已切到 右→左 (日漫)</string>
     <string name="switched_ltr">已切到 左→右</string>
     <string name="no_toc">本书没有目录</string>
+    <string name="comic_only">cbz 里只有图片, 只能用漫画模式</string>
     <string name="jump">跳转</string>
     <string name="open_book_failed">打开失败: %1$s</string>
     <string name="indexing">后台建索引 %1$d 本…</string>

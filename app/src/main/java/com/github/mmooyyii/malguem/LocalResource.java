@@ -33,7 +33,7 @@ public class LocalResource implements ResourceInterface {
         for (var f : children) {
             if (f.isDirectory()) {
                 out.add(new ListItem(resource_id, f.getName(), ListItem.FileType.Dir));
-            } else if (f.getName().toLowerCase().endsWith(".epub")) {
+            } else if (Books.isBook(f.getName())) {
                 out.add(new ListItem(resource_id, f.getName(), ListItem.FileType.Epub));
             }
         }

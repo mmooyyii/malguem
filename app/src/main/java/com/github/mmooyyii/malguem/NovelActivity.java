@@ -428,8 +428,8 @@ public class NovelActivity extends AppCompatActivity {
                     var db = Database.getInstance(NovelActivity.this).getDatabase();
                     var info = db.get_epub_info(resource_id, book_uri);
                     epub_book_page = info.current_page;
-                    // 有持久化索引时 0 次网络往返完成开书
-                    epub_book = LazyEpub.open(client.to_json(), book_uri, client, db);
+                    // 有持久化索引时 0 次网络往返完成开书 (epub / cbz 按后缀分派)
+                    epub_book = Books.open(client.to_json(), book_uri, client, db);
                     handler.post(() -> {
                         if (isDestroyed()) {
                             return; // 活动已销毁时窗口已被系统回收, 再 dismiss 会抛 View not attached

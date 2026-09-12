@@ -63,8 +63,8 @@ public class CoverLoader {
             Bitmap bmp = readDisk(key);
             if (bmp == null) {
                 try {
-                    // 有持久化索引时 0 次往返完成 epub 初始化, 只为封面本体发一次请求
-                    byte[] bytes = LazyEpub.open(namespace, uri, client, db).cover();
+                    // 有持久化索引时 0 次往返完成初始化, 只为封面本体发一次请求
+                    byte[] bytes = Books.open(namespace, uri, client, db).cover();
                     if (bytes != null) {
                         bmp = decode(bytes);
                         if (bmp != null) {

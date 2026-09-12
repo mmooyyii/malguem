@@ -14,6 +14,9 @@ public interface Book {
 
     String GetMediaType(String filename);
 
+    // 封面图片字节, 没有封面返回 null
+    byte[] cover() throws Exception;
+
     // 目录: 标题 -> spine 页码
     class TocEntry {
         public final String title;

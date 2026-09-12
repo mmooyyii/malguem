@@ -217,10 +217,15 @@ public class OpdsResource implements ResourceInterface {
                     continue;
                 }
                 if (rel.startsWith("http://opds-spec.org/acquisition")) {
-                    // 只认 epub, 其余格式(pdf/cbz/mobi 等)跳过
+                    // 只认 epub 和 cbz, 其余格式(pdf/mobi/cbr 等)跳过.
+                    // 同一本书两种格式都给时选 epub (它有目录); cbr 是 rar 壳, 流式读不了, 别误收
                     if (type.contains("epub")) {
                         entry.bookHref = resolve(baseUrl, href);
                         entry.ext = ".epub";
+                    } else if (entry.bookHref == null
+                            && (type.contains("cbz") || type.contains("comicbook+zip"))) {
+                        entry.bookHref = resolve(baseUrl, href);
+                        entry.ext = ".cbz";
                     }
                 } else if (entry.navHref == null
                         && (type.contains("profile=opds-catalog") || "subsection".equals(rel))) {

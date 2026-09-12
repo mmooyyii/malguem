@@ -34,8 +34,12 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
 
 - 数据源: `ResourceInterface` 四个实现 (webdav/smb/local/opds), 配置序列化成 json 存 SQLite (`Database.java`), 按字节区间 `Slice` 随机读;
   OPDS 目录按标题映射进 pwd 模型, Range 读复用 WebdavResource 的 http 客户端
-- 只支持 epub (`LazyEpub` 流式解析); pdf 支持做过又拆掉了, 别再加回来 (PdfRenderer 只认本地文件, 整本下载与产品定位不符)
-- `LazyEpub`: 流式解析 epub, 只按 HTTP Range 拉取需要的 zip 条目 (EOCD → 中央目录 → 按需取本地头+数据)
+- 只支持 epub 与 cbz (都是 zip 壳, 共用 `LazyZip` 的流式随机读, `Books` 按后缀分派并给出 isBook/stripExt);
+  pdf 支持做过又拆掉了, 别再加回来 (PdfRenderer 只认本地文件, 整本下载与产品定位不符); cbr 是 rar 壳没法流式读, 同理别加
+- `LazyZip`: 只按 HTTP Range 拉需要的 zip 条目 (EOCD → 中央目录 → 按需取本地头+数据), 一批条目合成一次 multi-range 请求;
+  `LazyEpub` 在其上按 opf 解释包内容, `LazyCbz` 把图片按文件名自然序当页 (page2 在 page10 前), 每页一张图, 用 `cbz-page/页码.ext` 引用避开文件名编码问题
+- cbz 只有漫画模式 (没有文字流), 切小说模式的入口在 ComicActivity 菜单与 MainActivity 长按菜单里都禁掉了
+- 两种格式的索引共用 epub_index 表: epub 索引是 `{"v":2,...}`, cbz 是 `{"v":1,"kind":"cbz",...}`, 靠 kind 区分
 - `WebdavResource` 处理 multipart range 响应; 注意服务器可能合并相邻 range (RFC 7233),
   分段必须按覆盖关系分配 (`assignParts`), 不能按 offset 精确配对
 - 阅读界面: `NovelActivity` (WebView 翻章) / `ComicActivity` (左右双栏), 文件列表菜单键/长按OK切换两种模式

@@ -99,12 +99,11 @@ public class IndexCrawler {
                 if (budget <= 0 || fails >= MAX_CONSECUTIVE_FAILS || Thread.currentThread().isInterrupted()) {
                     break;
                 }
-                if (LazyEpub.index_up_to_date(db.get_epub_index(ns, uri))) {
+                if (Books.index_up_to_date(uri, db.get_epub_index(ns, uri))) {
                     continue; // 已有当前版本的索引; 旧版本(如 v1 无目录)会走重建
                 }
                 try {
-                    var book = new LazyEpub(uri, client);
-                    db.put_epub_index(ns, uri, book.index_json());
+                    db.put_epub_index(ns, uri, Books.build_index(uri, client));
                     budget--;
                     fails = 0;
                     built++;

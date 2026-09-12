@@ -105,6 +105,7 @@
     <string name="switched_rtl">Switched to right → left (manga)</string>
     <string name="switched_ltr">Switched to left → right</string>
     <string name="no_toc">This book has no table of contents</string>
+    <string name="comic_only">cbz has images only — comic mode is the only option</string>
     <string name="jump">Go</string>
     <string name="open_book_failed">Failed to open: %1$s</string>
     <string name="indexing">indexing %1$d books…</string>

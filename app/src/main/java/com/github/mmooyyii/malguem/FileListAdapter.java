@@ -231,10 +231,7 @@ public class FileListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
     }
 
     private static String stripExt(String name) {
-        if (name.toLowerCase().endsWith(".epub")) {
-            return name.substring(0, name.length() - 5);
-        }
-        return name;
+        return Books.stripExt(name);
     }
 
     private static int lighten(int color, float f) {

@@ -3,6 +3,7 @@
 -keepclassmembers class com.github.mmooyyii.malguem.LazyEpub$IndexData { <fields>; }
 -keepclassmembers class com.github.mmooyyii.malguem.LazyEpub$IndexEntry { <fields>; }
 -keepclassmembers class com.github.mmooyyii.malguem.LazyEpub$TocItem { <fields>; }
+-keepclassmembers class com.github.mmooyyii.malguem.LazyCbz$CbzIndex { <fields>; }
 -keepclassmembers class com.github.mmooyyii.malguem.AppUpdater$Manifest { <fields>; }
 -keepclassmembers class com.github.mmooyyii.malguem.ComicLayout { <fields>; }
 

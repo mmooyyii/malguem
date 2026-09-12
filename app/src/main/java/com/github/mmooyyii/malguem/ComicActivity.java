@@ -305,7 +305,7 @@ public class ComicActivity extends AppCompatActivity {
 
     // OK/菜单键呼出的阅读菜单
     private void showReaderMenu() {
-        String[] items = {
+        String[] all = {
                 getString(R.string.menu_toc),
                 getString(R.string.menu_jump),
                 getString(R.string.menu_direction, getString(rtl ? R.string.dir_rtl : R.string.dir_ltr)),
@@ -313,6 +313,8 @@ public class ComicActivity extends AppCompatActivity {
                 getString(R.string.menu_layout),
                 getString(R.string.menu_to_novel),
         };
+        // cbz 里只有图片, 没有可重排的文字流, 去掉最后一项"切换为小说模式"
+        String[] items = Books.isCbz(book_uri) ? java.util.Arrays.copyOf(all, all.length - 1) : all;
         new AlertDialog.Builder(this)
                 .setItems(items, (dialog, which) -> {
                     var db = Database.getInstance(this).getDatabase();
@@ -542,8 +544,8 @@ public class ComicActivity extends AppCompatActivity {
                 try {
                     LoadReadHistory();
                     var db = Database.getInstance(ComicActivity.this).getDatabase();
-                    // 有持久化索引时 0 次网络往返完成开书
-                    epub_book = LazyEpub.open(client.to_json(), book_uri, client, db);
+                    // 有持久化索引时 0 次网络往返完成开书 (epub / cbz 按后缀分派)
+                    epub_book = Books.open(client.to_json(), book_uri, client, db);
                     handler.post(() -> {
                         if (isDestroyed()) {
                             return; // 活动已销毁时窗口已被系统回收, 再 dismiss 会抛 View not attached
