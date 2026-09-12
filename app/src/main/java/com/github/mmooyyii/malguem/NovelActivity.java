@@ -34,6 +34,39 @@ public class NovelActivity extends AppCompatActivity {
     private TextView pageView;
     private android.widget.ProgressBar pageLoading;
     private SmoothScroller scroller;
+
+    // ---- 章内翻页 ----
+    // 用 CSS 多列把正文流成"一列一屏", 翻页就是横向移一屏; 断行交给浏览器, 不会把文字切成半行.
+    // 全靠 JS 在加载完成后设置, 不改 HTML 结构 (epub 的 html 五花八门, 硬塞标签容易出岔子).
+    // pagerPages<=0 表示这台设备没按多列排出来 (老 WebView), 自动退回原来的上下滚动, 不至于没法读
+    private int pagerPages = 0;
+    private int pagerPage = 0;
+    private static final int PAGER_PAD = 28; // 左右留白 (css px)
+    private static final int PAGER_GAP = 56; // 列间距, 也就是翻页时相邻两屏之间的空隙
+
+    // 建立分页并返回总页数; 返回 0 表示没分成
+    private static final String PAGER_INIT =
+            "(function(){try{"
+                    + "var b=document.body,d=document.documentElement;"
+                    + "if(!b){return 0}"
+                    + "var pad=%1$d,gap=%2$d,colW=window.innerWidth-pad*2;"
+                    + "if(colW<=0){return 0}"
+                    + "b.style.margin='0';b.style.padding='0 '+pad+'px';"
+                    + "b.style.boxSizing='border-box';b.style.height='100vh';"
+                    + "b.style.columnWidth=colW+'px';b.style.columnGap=gap+'px';b.style.columnFill='auto';"
+                    + "d.style.overflow='hidden';b.style.overflow='hidden';"
+                    + "b.style.transform='translateX(0)';b.style.transition='none';"
+                    + "window.__step=colW+gap;"
+                    // 末列不带 gap, 补一个再除, 否则最后一页会被算漏
+                    + "return Math.max(1,Math.round((b.scrollWidth+gap)/window.__step));"
+                    + "}catch(e){return 0}})()";
+
+    // 用 transform 平移而不是 scrollLeft: 根元素设了 overflow:hidden 后, 有的 WebView 会无视
+    // scrollLeft; transform 是纯变换, 不依赖滚动容器. body 的左 padding 一起平移, 每翻一屏
+    // 正好让下一列的左边缘落到原来 padding 的位置, 留白保持一致
+    private static final String PAGER_GO =
+            "(function(){try{document.body.style.transform='translateX('+(-(%1$d*(window.__step||0)))+'px)';"
+                    + "return 1}catch(e){return 0}})()";
     Book epub_book;
     int epub_book_page;
     int resource_id;
@@ -111,11 +144,68 @@ public class NovelActivity extends AppCompatActivity {
         super.onPause();
     }
 
-    // 当前滚动位置的万分比 (0-10000)
+    // 章内位置的万分比 (0-10000): 翻页模式按页序, 退回滚动时按滚动位置.
+    // 两种模式存的是同一个语义 (章内读到百分之几), 所以互相切换、跨版本都不会指错地方
     private int currentRatio() {
+        if (pagerPages > 0) {
+            return pagerPages <= 1 ? 0 : (int) (10000L * pagerPage / (pagerPages - 1));
+        }
         @SuppressWarnings("deprecation")
         int max = Math.max(1, (int) (novelView.getContentHeight() * novelView.getScale()) - novelView.getHeight());
         return (int) (10000L * Math.max(0, Math.min(max, novelView.getScrollY())) / max);
+    }
+
+    // 内容排完后建立章内分页, 再按万分比跳到上次读到的位置
+    private void setupPager(int offset) {
+        var js = String.format(java.util.Locale.US, PAGER_INIT, PAGER_PAD, PAGER_GAP);
+        novelView.evaluateJavascript(js, value -> {
+            pagerPages = parseJsInt(value);
+            if (pagerPages > 0) {
+                int target = pagerPages <= 1 ? 0
+                        : (int) Math.round((double) offset * (pagerPages - 1) / 10000.0);
+                gotoPagerPage(target);
+            } else {
+                // 分页没生效: 退回滚动, 按万分比换算成像素 (老逻辑)
+                @SuppressWarnings("deprecation")
+                int max = Math.max(0, (int) (novelView.getContentHeight() * novelView.getScale()) - novelView.getHeight());
+                novelView.scrollTo(0, (int) ((long) offset * max / 10000));
+                updateProgressLabel();
+            }
+        });
+    }
+
+    private void gotoPagerPage(int n) {
+        pagerPage = Math.max(0, Math.min(Math.max(0, pagerPages - 1), n));
+        novelView.evaluateJavascript(String.format(java.util.Locale.US, PAGER_GO, pagerPage), null);
+        updateProgressLabel();
+    }
+
+    // evaluateJavascript 回传的是 json 字面量, 拿不到数就当分页失败
+    private static int parseJsInt(String value) {
+        if (value == null) {
+            return 0;
+        }
+        try {
+            return (int) Double.parseDouble(value.replace("\"", "").trim());
+        } catch (NumberFormatException e) {
+            return 0;
+        }
+    }
+
+    // 页码区: 翻页模式给"本章第几页", 否则给章号; 后面统一跟全书百分比 —— 重排式排版下
+    // 全书总页数本来就不存在 (字号一改页数就变), 能稳定表达的只有读到全书多少比例
+    private void updateProgressLabel() {
+        if (epub_book == null) {
+            return;
+        }
+        int total = epub_book.total_pages();
+        var pct = String.format(java.util.Locale.US, "%.1f",
+                epub_book.progress(epub_book_page, currentRatio()) / 100.0);
+        if (pagerPages > 0) {
+            pageView.setText(getString(R.string.novel_pager, pagerPage + 1, pagerPages, pct));
+        } else {
+            pageView.setText(getString(R.string.novel_chapter, epub_book_page + 1, total, pct));
+        }
     }
 
     @Override
@@ -156,16 +246,18 @@ public class NovelActivity extends AppCompatActivity {
         novelView.setBackgroundColor(dark ? 0xFF121212 : 0xFFFFFFFF);
     }
 
-    // 夜间模式把样式插到 </head> 前 (没有 head 就直接拼在最前面)
+    // 注入样式到 </head> 前 (没有 head 就拼在最前面): 图片尺寸约束 + 夜间色.
+    // 图片必须限制在一屏内 —— 多列分页下超过列高的图会被生生切断, 且会把分页算歪
     private String decorate(String html) {
-        if (!dark) {
-            return html;
+        var css = new StringBuilder("<style>img,svg{max-width:100% !important;max-height:100vh !important}</style>");
+        if (dark) {
+            css.append(DARK_CSS);
         }
         int i = html.toLowerCase().indexOf("</head>");
         if (i >= 0) {
-            return html.substring(0, i) + DARK_CSS + html.substring(i);
+            return html.substring(0, i) + css + html.substring(i);
         }
-        return DARK_CSS + html;
+        return css + html;
     }
 
     public void show_new_page(String html, int page_offset) {
@@ -191,11 +283,10 @@ public class NovelActivity extends AppCompatActivity {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                // 内容布局完成后再恢复滚动位置; 在 loadData 之前 scrollTo 会被加载重置, 恢复无效.
-                // page_offset 是万分比, 按当前排版高度换算成像素
-                @SuppressWarnings("deprecation")
-                int max = Math.max(0, (int) (view.getContentHeight() * view.getScale()) - view.getHeight());
-                view.scrollTo(0, (int) ((long) page_offset * max / 10000));
+                // 内容布局完成后再分页并恢复位置; 在 loadData 之前动位置会被加载重置, 恢复无效
+                pagerPages = 0;
+                pagerPage = 0;
+                setupPager(page_offset);
             }
         });
         novelView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
@@ -215,9 +306,16 @@ public class NovelActivity extends AppCompatActivity {
             showReaderMenu();
             return true;
         }
-        // 上下键: 短按平滑滚一屏 (留 10% 重叠, 减速曲线); 长按进入匀速巡航, 松手滑行减速停下
+        // 上下键: 翻页模式下没有纵向滚动可言 (每列正好一屏高), 改成跳章;
+        // 退回滚动模式时仍是原来的短按滚一屏 / 长按巡航
         if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_DPAD_UP) {
             int dir = keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : -1;
+            if (pagerPages > 0) {
+                if (action == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
+                    changeChapter(dir);
+                }
+                return true;
+            }
             if (action == KeyEvent.ACTION_DOWN) {
                 if (event.getRepeatCount() == 0) {
                     scroller.pageScroll(dir);
@@ -229,21 +327,41 @@ public class NovelActivity extends AppCompatActivity {
             }
             return true;
         }
-        boolean page_changed = false;
-        if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_LEFT) {
-            page_changed = true;
-            epub_book_page = Math.max(0, epub_book_page - 1);
-        } else if (action == KeyEvent.ACTION_DOWN && keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
-            page_changed = true;
-            epub_book_page = Math.max(0, Math.min(epub_book.total_pages() - 1, epub_book_page + 1));
-        }
-        if (page_changed) {
-            notifyPageChanged(0);
+        // 左右键: 翻页模式翻章内的页, 翻到头自动跨到相邻章; 否则直接翻章
+        if (action == KeyEvent.ACTION_DOWN
+                && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
+            int dir = keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1;
+            if (pagerPages > 0) {
+                int next = pagerPage + dir;
+                if (next >= 0 && next < pagerPages) {
+                    gotoPagerPage(next);
+                    return true;
+                }
+            }
+            changeChapter(dir);
             return true;
         }
         return super.dispatchKeyEvent(event);
     }
 
+
+    // 换章: 往后翻落在新章第一页, 往前翻落在上一章最后一页 (才像连续往回读)
+    private void changeChapter(int dir) {
+        int total = epub_book.total_pages();
+        if (dir > 0) {
+            if (epub_book_page >= total - 1) {
+                return;
+            }
+            epub_book_page++;
+            notifyPageChanged(0);
+        } else {
+            if (epub_book_page <= 0) {
+                return;
+            }
+            epub_book_page--;
+            notifyPageChanged(10000);
+        }
+    }
 
     // OK/菜单键呼出的阅读菜单
     private void showReaderMenu() {
@@ -394,10 +512,14 @@ public class NovelActivity extends AppCompatActivity {
                     return;
                 }
                 pageLoading.setVisibility(android.view.View.GONE);
+                // 新章还没排版, 先清掉上一章的分页状态, 否则页码会闪一下上一章的页数
+                pagerPages = 0;
+                pagerPage = 0;
                 if (html != null) {
                     show_new_page(html, page_offset);
                 }
-                pageView.setText(getString(R.string.page, page + 1, total));
+                // 这时只能按章号显示; 分页建立后 setupPager 会再刷成本章页码
+                updateProgressLabel();
                 try {
                     prepare_pages(5);
                 } catch (InterruptedException ignore) {

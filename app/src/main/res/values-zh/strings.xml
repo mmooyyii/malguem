@@ -122,6 +122,10 @@
     <string name="err_http">服务器返回错误 (HTTP %1$d)</string>
     <string name="err_bad_file">文件损坏或不是有效的电子书</string>
 
+    <!-- 小说进度: 本章页码 + 全书百分比 (重排排版下没有稳定的总页数) -->
+    <string name="novel_pager">%1$d/%2$d 页 · %3$s%%</string>
+    <string name="novel_chapter">%1$d/%2$d 章 · %3$s%%</string>
+
     <!-- 更新诊断: 所有更新源都失败时, 逐源显示断在哪一环 -->
     <string name="download_failed_title">下载失败</string>
     <string name="diag_dns">DNS 解析失败 (域名被污染或没配 DNS)</string>

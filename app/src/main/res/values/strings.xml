@@ -135,6 +135,10 @@
     <string name="err_http">Server error (HTTP %1$d)</string>
     <string name="err_bad_file">The file is corrupt or not a valid book.</string>
 
+    <!-- Novel progress: chapter pages + whole-book percent (reflow layout has no stable total page count) -->
+    <string name="novel_pager">p.%1$d/%2$d · %3$s%%</string>
+    <string name="novel_chapter">ch.%1$d/%2$d · %3$s%%</string>
+
     <!-- Update diagnostics: shown per source when every update source fails -->
     <string name="download_failed_title">Download failed</string>
     <string name="diag_dns">DNS lookup failed (poisoned or no DNS)</string>

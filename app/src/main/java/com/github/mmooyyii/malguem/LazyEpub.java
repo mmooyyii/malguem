@@ -230,6 +230,43 @@ public class LazyEpub extends LazyZip implements Book {
         return contents.size();
     }
 
+    private long[] weights;    // 各 spine 项 html 的未压缩字节数, 懒算一次
+    private long totalWeight;
+
+    // 全书进度万分比, 按各章长度加权: 章长差几十倍很常见, 按章号均分的话读长章时进度几乎不动,
+    // 读短章又一下跳很多. 权重取 zip 中央目录里的未压缩大小 —— 那是解析时就有的数据,
+    // 不必读正文 (精确字数要解全文, 与按需加载的设计冲突; 百分比只需要相对比例, 字节数够用).
+    // html 标签占比各书不同, 但同一本书里各章的标签密度接近, 不影响章与章的相对比例
+    @Override
+    public int progress(int page, int inner) {
+        ensureWeights();
+        if (totalWeight <= 0) {
+            return Book.super.progress(page, inner); // 拿不到大小 (索引老/条目缺失) 时退回按章均分
+        }
+        long before = 0;
+        for (int i = 0; i < page && i < weights.length; i++) {
+            before += weights[i];
+        }
+        long cur = page >= 0 && page < weights.length ? weights[page] : 0;
+        long pos = before + cur * Math.max(0, Math.min(10000, inner)) / 10000;
+        return (int) Math.max(0, Math.min(10000, 10000L * pos / totalWeight));
+    }
+
+    private void ensureWeights() {
+        if (weights != null) {
+            return;
+        }
+        var w = new long[contents.size()];
+        long sum = 0;
+        for (int i = 0; i < contents.size(); i++) {
+            var e = zip_dir.get(contents.get(i));
+            w[i] = e == null ? 0 : e.uncompressedSize;
+            sum += w[i];
+        }
+        totalWeight = sum;
+        weights = w; // 最后赋值: 别让并发读者看到还没填完的数组
+    }
+
     // 读取封面图片字节, 没有封面返回 null
     public byte[] cover() throws Exception {
         if (cover_href == null) {
