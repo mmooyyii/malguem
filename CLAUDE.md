@@ -47,4 +47,9 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
   SeekBar 跳页 / 小说字号+夜间(SharedPreferences 全局) / 漫画阅读方向rtl+单页(epub 表按书存) / 互切模式(顶替 Activity)
 - 小说章内进度 page_offset 存万分比而非像素 (字号/夜间重排后按比例恢复); MainActivity 用 onResume 刷新列表
 - 首页最前排是"最近阅读" (`epub.last_read` 倒序, `RecentEpub` 类型条目自带 namespace, 点开直接续读)
-- release 开了 R8: Gson 反射模型(epub 索引/更新清单)和 jcifs 的 keep 规则在 proguard-rules.pro, 新增反射模型记得补 keep
+- release 开了 R8: Gson 反射模型(epub/cbz 索引、漫画布局)和 jcifs 的 keep 规则在 proguard-rules.pro.
+  **坑**: `-keepclassmembers` 防不住 full mode 的 field value propagation —— 字段只被读、从不被写(写入全靠 Gson 反射)时,
+  R8 判定它恒为 null 并把字段整个删掉, 编译期零警告. OTA 的 version.json 模型就这么被吃掉, release 包里 tag 永远是 null,
+  所有更新源都报"内容不对", 而 debug 包一切正常 (只有 release 才跑 R8, 所以本地怎么测都没事).
+  在 v1.8.0 的 CI 包上实测确认: dex 里压根没有 tag 字段; 这个模型从 OTA 落地起就没变过, 早期版本大概率同病.
+  已改成 `org.json` 手解. 新增纯反序列化模型: 要么 `-keep class X { <fields>; }`, 要么手解, 且必须用 release 包实测

@@ -13,8 +13,6 @@ import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.FileProvider;
 
-import com.google.gson.Gson;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -55,16 +53,31 @@ public class AppUpdater {
     // 检查阶段验证过可用的源, 下载从它开始试; 检查与下载在不同线程, 要 volatile 保证可见
     private volatile int goodSource = 0;
 
-    // version.json 的内容: {"tag": "v1.2"}
-    private static class Manifest {
-        String tag;
-    }
-
-    // 逐源尝试的结果: manifest 非空表示拿到了版本号; 否则 failures 按源记下断在哪一环.
+    // 逐源尝试的结果: tag 非空表示拿到了版本号; 否则 failures 按源记下断在哪一环.
     // 全灭时把每行原因摆给用户看, 不然只有一句"所有源都不可用", 没法判断是网络/DNS 还是资产没发上去
     private static class CheckResult {
-        Manifest manifest;
+        String tag;
         final java.util.List<String> failures = new java.util.ArrayList<>();
+    }
+
+    // version.json 就一个字段 {"tag":"v1.2"}, 手解掉, 不碰 Gson 反射.
+    // 血的教训: 之前用 Gson 映射到一个只有 String tag 的模型, 而这个字段只被读、从不被写
+    // (写入是反序列化干的), R8 full mode 的 field value propagation 就判定它恒为 null,
+    // 把读取换成常量并把字段整个删了 —— -keepclassmembers 拦不住这类优化.
+    // 结果 release 包里 tag 永远是 null, 每个源都报"内容不是 version.json", OTA 从未真正可用过.
+    private static String parseTag(String body) {
+        try {
+            var tag = new org.json.JSONObject(body).optString("tag", "");
+            return tag.isEmpty() ? null : tag;
+        } catch (Exception e) {
+            return null; // 压根不是 json (门户劫持/错误页)
+        }
+    }
+
+    // 内容不对时附上响应开头, 一眼能看出是 HTML 门户页还是别的什么
+    private static String preview(String body) {
+        var s = body.replaceAll("\\s+", " ").trim();
+        return s.length() > 40 ? s.substring(0, 40) + "…" : s;
     }
 
     // 必须在 Activity onCreate 期间构造 (registerForActivityResult 的限制)
@@ -90,12 +103,12 @@ public class AppUpdater {
                 if (activity.isDestroyed()) {
                     return;
                 }
-                if (result.manifest == null) {
+                if (result.tag == null) {
                     showFailures(R.string.update_check_failed, result.failures);
-                } else if (result.manifest.tag.equals(current)) {
+                } else if (result.tag.equals(current)) {
                     Toast.makeText(activity, activity.getString(R.string.already_latest, current), Toast.LENGTH_SHORT).show();
                 } else {
-                    askAndDownload(result.manifest.tag, current);
+                    askAndDownload(result.tag, current);
                 }
             });
         }).start();
@@ -160,14 +173,16 @@ public class AppUpdater {
                         // 抛出来让 Errors.diagnose 统一翻译成 "HTTP 404" 这类可读原因
                         throw new HttpStatusException(response.code(), "version.json");
                     }
-                    var manifest = new Gson().fromJson(response.body().string(), Manifest.class);
-                    if (manifest == null || manifest.tag == null) {
+                    var body = response.body().string();
+                    var tag = parseTag(body);
+                    if (tag == null) {
                         // 200 但内容不对: 多半是镜像/热点门户返回了自己的页面
-                        result.failures.add(hostOf(base) + " — " + activity.getString(R.string.diag_bad_json));
+                        result.failures.add(hostOf(base) + " — "
+                                + activity.getString(R.string.diag_bad_json) + " [" + preview(body) + "]");
                         continue;
                     }
                     goodSource = i;
-                    result.manifest = manifest;
+                    result.tag = tag;
                     return result;
                 }
             } catch (Exception e) {
