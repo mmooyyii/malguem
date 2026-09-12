@@ -43,6 +43,11 @@ public class ComicActivity extends AppCompatActivity {
 
     private TextView pageView;
     private android.widget.ProgressBar pageLoading;
+    private View pageMask;
+    // 本次翻页还有几栏没渲染就绪; 两栏都到齐才揭遮罩
+    private int pendingRender = 0;
+    // 每次翻页递增: 连续快翻时用它丢弃上一页的迟到回调, 否则刚盖上的遮罩会被旧回调揭掉
+    private int pageGeneration = 0;
     Book epub_book;
     int epub_book_page;
     int resource_id;
@@ -62,6 +67,7 @@ public class ComicActivity extends AppCompatActivity {
         setContentView(R.layout.activity_comic);
         pageView = findViewById(R.id.pageNumberTextView);
         pageLoading = findViewById(R.id.pageLoading);
+        pageMask = findViewById(R.id.pageMask);
         ComicViewLeft = findViewById(R.id.comicLeft);
         leftScroller = new SmoothScroller(ComicViewLeft);
         ComicViewRight = findViewById(R.id.comicRight);
@@ -188,6 +194,8 @@ public class ComicActivity extends AppCompatActivity {
         findViewById(R.id.comicRoot).setBackgroundColor(bg);
         ComicViewLeft.setBackgroundColor(bg);
         ComicViewRight.setBackgroundColor(bg);
+        // 遮罩必须和背景同色, 不然揭开那一下会看见色块
+        pageMask.setBackgroundColor(bg);
         pageView.setVisibility(layout.hidePage ? View.GONE : View.VISIBLE);
     }
 
@@ -212,7 +220,8 @@ public class ComicActivity extends AppCompatActivity {
         return head + html;
     }
 
-    public void show_new_page(WebView view, String html) {
+    // onReady 在这一栏首帧提交时回调 (主线程), 调用方据此决定何时揭遮罩
+    public void show_new_page(WebView view, String html, Runnable onReady) {
         html = decorate(html);
         view.scrollTo(0, 0);
         view.setWebViewClient(new WebViewClient() {
@@ -233,8 +242,35 @@ public class ComicActivity extends AppCompatActivity {
                     return super.shouldInterceptRequest(view, request);
                 }
             }
+
+            @Override
+            public void onPageCommitVisible(WebView view, String url) {
+                // 首帧已提交, 这一栏可以见人了 (比 onPageFinished 更贴近"画出来了")
+                onReady.run();
+            }
         });
         view.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
+    }
+
+    // 末尾凑不满一屏两页时清空后读栏; 清空同样是一次渲染, 也得等它就绪再揭遮罩
+    private void clear_page(WebView view, Runnable onReady) {
+        view.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageCommitVisible(WebView view, String url) {
+                onReady.run();
+            }
+        });
+        view.loadDataWithBaseURL(null, "", "text/html", "UTF-8", null);
+    }
+
+    // 一栏渲染就绪; 都到齐才揭遮罩. gen 对不上说明是上一页的迟到回调, 直接丢掉
+    private void onRendered(int gen) {
+        if (gen != pageGeneration) {
+            return;
+        }
+        if (--pendingRender <= 0) {
+            pageMask.setVisibility(View.GONE);
+        }
     }
 
     @Override
@@ -480,11 +516,17 @@ public class ComicActivity extends AppCompatActivity {
                     return;
                 }
                 pageLoading.setVisibility(View.GONE);
+                // 先盖遮罩再换内容: 两栏各自渲染, 不遮会看到一边先换一边后换, 像多翻了一页
+                final int gen = ++pageGeneration;
+                pageMask.setVisibility(View.VISIBLE);
                 if (single) {
                     // 单页模式: 右栏隐藏, 左栏占满整屏
                     ComicViewRight.setVisibility(View.GONE);
+                    pendingRender = 1;
                     if (firstHtml != null) {
-                        show_new_page(ComicViewLeft, firstHtml);
+                        show_new_page(ComicViewLeft, firstHtml, () -> onRendered(gen));
+                    } else {
+                        onRendered(gen); // 没内容也要消计数, 否则遮罩揭不掉
                     }
                     ComicViewLeft.requestFocus();
                 } else {
@@ -492,17 +534,26 @@ public class ComicActivity extends AppCompatActivity {
                     // 阅读顺序里的第一页: 常规放左栏, rtl(日漫) 放右栏
                     var firstView = rtl ? ComicViewRight : ComicViewLeft;
                     var secondView = rtl ? ComicViewLeft : ComicViewRight;
+                    pendingRender = 2;
                     if (firstHtml != null) {
-                        show_new_page(firstView, firstHtml);
+                        show_new_page(firstView, firstHtml, () -> onRendered(gen));
+                    } else {
+                        onRendered(gen);
                     }
                     if (secondHtml != null) {
-                        show_new_page(secondView, secondHtml);
+                        show_new_page(secondView, secondHtml, () -> onRendered(gen));
                     } else {
                         // 末尾凑不满一屏两页时, 后读栏清空避免残留上一页
-                        secondView.loadDataWithBaseURL(null, "", "text/html", "UTF-8", null);
+                        clear_page(secondView, () -> onRendered(gen));
                     }
                     firstView.requestFocus();
                 }
+                // 兜底: 渲染回调万一不来 (渲染进程异常等), 别让遮罩一直盖着整屏
+                pageMask.postDelayed(() -> {
+                    if (gen == pageGeneration) {
+                        pageMask.setVisibility(View.GONE);
+                    }
+                }, 1500);
                 pageView.setText(getString(R.string.page, firstPage + 1, total));
                 try {
                     // 漫画一页一张大图, 预取窗口 16 页 (慢链路上带宽闲着也是闲着, 挖深些抗快翻);

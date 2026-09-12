@@ -30,6 +30,16 @@
             android:layout_weight="1" />
     </LinearLayout>
 
+    <!-- 翻页遮罩: 左右是两个各自独立渲染的 WebView, 完成时刻对不齐.
+         不遮的话会看到一边先换一边后换, 像一下翻了两页. 盖住等两边都就绪再一起揭开.
+         背景色由 applyLayout 跟随书的背景设置, 揭开前后看起来就是整屏一次换页 -->
+    <View
+        android:id="@+id/pageMask"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/paper"
+        android:visibility="gone" />
+
     <!-- 翻页/预取未就绪时的小转圈 -->
     <ProgressBar
         android:id="@+id/pageLoading"
