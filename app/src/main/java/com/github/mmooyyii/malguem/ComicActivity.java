@@ -65,6 +65,7 @@ public class ComicActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_comic);
+        Fullscreen.apply(this);
         pageView = findViewById(R.id.pageNumberTextView);
         pageLoading = findViewById(R.id.pageLoading);
         pageMask = findViewById(R.id.pageMask);
@@ -128,6 +129,14 @@ public class ComicActivity extends AppCompatActivity {
                 Thread.currentThread().interrupt();  // 重置中断标志
             }
         });
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            Fullscreen.apply(this); // 阅读菜单关掉后系统栏可能被放回来, 重新藏一次
+        }
     }
 
     @Override

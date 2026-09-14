@@ -9,4 +9,9 @@
         <item name="android:textColorSecondary">@color/ink_muted</item>
         <item name="android:textColorHint">@color/ink_muted</item>
     </style>
+
+    <!-- 阅读界面: 开屏就没有状态栏, 免得先闪一下时间/wifi 那行 (运行期由 Fullscreen 维持) -->
+    <style name="Theme.Malguem.Reader" parent="Theme.Malguem">
+        <item name="android:windowFullscreen">true</item>
+    </style>
 </resources>
