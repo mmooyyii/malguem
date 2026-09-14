@@ -488,6 +488,34 @@ public class MainActivity extends AppCompatActivity {
         findViewById(R.id.listLoading).setVisibility(View.GONE);
         findViewById(R.id.emptyHint).setVisibility(
                 recents.isEmpty() && sources.isEmpty() ? View.VISIBLE : View.GONE);
+        ensureListFocus();
+    }
+
+    // 待机黑屏回来会走 onResume 重刷列表, notifyDataSetChanged 把聚焦的条目连同焦点一起冲掉;
+    // 而窗口焦点自始至终没变过, 系统不会再补一次默认焦点 —— 整屏没有 focus, 方向键谁都不接,
+    // 遥控器看着像失灵. 列表刷新后主动把焦点接回列表 (onKeyDown 里还有一道兜底)
+    private void ensureListFocus() {
+        RecyclerView list = findViewById(R.id.fileListView);
+        list.post(() -> {
+            if (!hasWindowFocus() || list.hasFocus()) {
+                return; // 焦点在弹窗上或本来就在列表里, 别抢
+            }
+            if (focusLost()) {
+                list.requestFocus();
+            }
+        });
+    }
+
+    // 当前没有任何有效焦点: 没人持有, 或持有者是 DecorView / 已经从窗口上摘掉的旧条目
+    private boolean focusLost() {
+        var f = getCurrentFocus();
+        return f == null || f == getWindow().getDecorView() || !f.isAttachedToWindow();
+    }
+
+    private static boolean isDpadKey(int keyCode) {
+        return keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
+                || keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT
+                || keyCode == KeyEvent.KEYCODE_DPAD_CENTER;
     }
 
     // 从阅读界面回来时刷新列表 (进度徽标/最近阅读). 用 onResume 而不是 ActivityResult:
@@ -511,6 +539,13 @@ public class MainActivity extends AppCompatActivity {
     // config/设置键 = 对聚焦的书删索引
     @Override
     public boolean onKeyDown(int keyCode, KeyEvent event) {
+        // 走到 Activity 说明没有 view 消费这个键: 方向键落到这里就是整屏丢了焦点, 先把焦点接回列表
+        if (focusLost() && isDpadKey(keyCode)) {
+            RecyclerView list = findViewById(R.id.fileListView);
+            if (list.requestFocus()) {
+                return true;
+            }
+        }
         if (keyCode == KeyEvent.KEYCODE_MENU) {
             if (!menuOnFocusedItem()) {
                 showHelpDialog();
@@ -839,6 +874,7 @@ public class MainActivity extends AppCompatActivity {
                     findViewById(R.id.listLoading).setVisibility(View.GONE);
                     fileListAdapter.setClient(client);
                     fileListAdapter.setItems(finalFileList);
+                    ensureListFocus();
                 });
             });
         }
