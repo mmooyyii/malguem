@@ -70,6 +70,12 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
 - 阅读界面: `NovelActivity` (WebView 翻章) / `ComicActivity` (左右双栏), 文件列表菜单键/长按OK切换两种模式;
   两个 Activity 用 `Theme.Malguem.Reader` (windowFullscreen) + `Fullscreen.apply` 藏掉系统栏,
   阅读菜单关掉会让窗口重新获焦, 所以 onWindowFocusChanged 里要再藏一次
+- 两个阅读界面的 WebView 都用 `file:///android_asset/` 当 baseUrl (工程里根本没有 assets 目录, 纯历史占位),
+  于是页面里的相对引用解析出来的 path 会带上这一段, `shouldInterceptRequest` 收到的是
+  `/android_asset/cbz-page/0.jpg` —— 资源请求一律先过 `Books.webPath` 把它剥掉.
+  **坑**: epub 长期没事只是走运, 它内部惯用 `../images/x.jpg`, 那个 `..` 恰好把 android_asset 抵消了;
+  不带 `..` 的引用 (cbz 每一页、OPDS 页流每一页、和图片同级的 xhtml) 会整本白屏.
+  v1.11.0 的 OPDS 页流就栽在这: 页码正常 (总页数来自 pse:count), 图一张都出不来
 - 阅读中 OK/菜单键呼出阅读菜单: 目录跳转(`LazyEpub` 解析 ncx/nav, 存进 epub_index, 索引版本 v2) /
   SeekBar 跳页 / 小说字号+夜间(SharedPreferences 全局) / 漫画阅读方向rtl+单页(epub 表按书存) / 互切模式(顶替 Activity)
 - 小说章内进度 page_offset 存万分比而非像素 (字号/夜间重排后按比例恢复); MainActivity 用 onResume 刷新列表

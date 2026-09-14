@@ -116,16 +116,15 @@ public class OpdsBook implements Book {
         return source.fetch(url);
     }
 
-    // "pse-page/3.jpg" -> 3; 不是页面请求返回 -1
+    // "pse-page/3.jpg" -> 3; 不是页面请求返回 -1.
+    // 按"前缀出现的位置"定位而不是要求整串以它开头: 调用方已经用 Books.webPath 剥过 baseUrl 那段,
+    // 这里再兜一次, 免得哪天 WebView 又在前面加上点什么就整本白屏
     private static int pageIndexOf(String filename) {
-        var name = filename;
-        while (name.startsWith(".") || name.startsWith("/")) {
-            name = name.substring(1);
-        }
-        if (!name.startsWith(PAGE_PREFIX)) {
+        int at = filename == null ? -1 : filename.lastIndexOf(PAGE_PREFIX);
+        if (at < 0) {
             return -1;
         }
-        var rest = name.substring(PAGE_PREFIX.length());
+        var rest = filename.substring(at + PAGE_PREFIX.length());
         int dot = rest.indexOf('.');
         if (dot >= 0) {
             rest = rest.substring(0, dot);

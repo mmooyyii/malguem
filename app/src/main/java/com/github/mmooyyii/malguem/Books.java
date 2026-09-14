@@ -50,6 +50,26 @@ public final class Books {
                 : LazyEpub.open(namespace, uri, client, db);
     }
 
+    // WebView 请求路径 -> 交给 Book 去取的包内路径.
+    // 两个阅读界面都用 file:///android_asset/ 当 baseUrl (工程里根本没有 assets 目录, 纯属历史占位),
+    // 于是相对引用解析出来的 path 会带上这一段: "cbz-page/0.jpg" 进来时是 "/android_asset/cbz-page/0.jpg".
+    // epub 一直没事只是走运 —— 它内部惯用 "../images/x.jpg", 那个 ".." 恰好把 android_asset 抵消掉了;
+    // 不带 ".." 的引用 (cbz 每一页、页流每一页、以及和图片同级的 xhtml) 就会带着前缀进来, 在包里当然找不到.
+    // 统一在入口剥掉, 别让每个 Book 实现各自去猜
+    static String webPath(String path) {
+        if (path == null) {
+            return null;
+        }
+        var s = path;
+        while (s.startsWith("/")) {
+            s = s.substring(1);
+        }
+        if (s.startsWith("android_asset/")) {
+            s = s.substring("android_asset/".length());
+        }
+        return s;
+    }
+
     // 这本书是不是走服务端页流: 是的话开书压根不碰索引 (页数由 pse:count 给, 图按页号取),
     // 建索引纯属白跑一趟 —— 而对 OPDS 漫画那一趟就是把整本拉下来 (62MB 一本).
     // IndexCrawler 跑到这一步时目录刚遍历完, 页流信息还在 OpdsResource 的缓存里, 不会多发请求

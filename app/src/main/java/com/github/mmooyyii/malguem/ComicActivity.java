@@ -236,12 +236,9 @@ public class ComicActivity extends AppCompatActivity {
         view.setWebViewClient(new WebViewClient() {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                var req = request.getUrl().getPath();
+                var req = Books.webPath(request.getUrl().getPath());
                 if (req == null) {
                     return super.shouldInterceptRequest(view, request);
-                }
-                if (!req.isEmpty() && req.charAt(0) == '/') {
-                    req = req.substring(1);
                 }
                 try {
                     var file = epub_book.GetResource(req);
