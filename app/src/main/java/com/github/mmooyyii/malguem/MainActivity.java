@@ -450,6 +450,18 @@ public class MainActivity extends AppCompatActivity {
         });
     }
 
+    // 添加/编辑数据源这类对话框关掉时, 窗口焦点比 init_resource_list 里那次 post 回来得晚:
+    // ensureListFocus 撞上 hasWindowFocus()==false 就放弃了, 可列表焦点已被 notifyDataSetChanged 冲掉,
+    // 系统又不认为窗口焦点变过, 不补默认焦点 —— 整屏没有 focus, 方向键全不认.
+    // 窗口焦点真正回来时再补一次, 不必等用户先按一下键去触发 onKeyDown 的兜底
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) {
+            ensureListFocus();
+        }
+    }
+
     // 当前没有任何有效焦点: 没人持有, 或持有者是 DecorView / 已经从窗口上摘掉的旧条目
     private boolean focusLost() {
         var f = getCurrentFocus();
