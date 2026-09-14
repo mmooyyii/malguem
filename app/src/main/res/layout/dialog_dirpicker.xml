@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:paddingLeft="24dp"
+    android:paddingTop="12dp"
+    android:paddingRight="24dp"
+    android:paddingBottom="4dp">
+
+    <TextView
+        android:id="@+id/dirPath"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:ellipsize="start"
+        android:singleLine="true"
+        style="@style/Text.DialogLabel" />
+
+    <ListView
+        android:id="@+id/dirList"
+        android:layout_width="match_parent"
+        android:layout_height="320dp"
+        android:cacheColorHint="@android:color/transparent"
+        android:divider="@null"
+        android:dividerHeight="0dp"
+        android:listSelector="@drawable/ring_focus" />
+</LinearLayout>

@@ -47,7 +47,16 @@
     <string name="label_password">Password</string>
     <string name="label_host">Host</string>
     <string name="label_share">Share</string>
-    <string name="label_path">Folder path</string>
+
+    <!-- 目录选择器 -->
+    <string name="pick_dir_title">Pick a folder</string>
+    <string name="pick_dir_ok">Use this folder</string>
+    <string name="pick_dir_up">…  Up</string>
+    <string name="pick_dir_volumes">Storage</string>
+    <string name="pick_dir_internal">Internal storage</string>
+    <string name="pick_dir_external">External storage</string>
+    <string name="pick_dir_denied">Cannot read this folder (permission?)</string>
+    <string name="need_storage_permission">Grant all-files access first, then add the folder again</string>
 
     <!-- 局域网扫描 -->
     <string name="no_lan_ip">No LAN IP found, check the network</string>

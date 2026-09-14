@@ -41,7 +41,15 @@
     <string name="label_password">密码</string>
     <string name="label_host">服务器地址</string>
     <string name="label_share">共享名</string>
-    <string name="label_path">本地目录路径</string>
+
+    <string name="pick_dir_title">选择目录</string>
+    <string name="pick_dir_ok">用这个目录</string>
+    <string name="pick_dir_up">…  返回上一级</string>
+    <string name="pick_dir_volumes">存储设备</string>
+    <string name="pick_dir_internal">内置存储</string>
+    <string name="pick_dir_external">外接存储</string>
+    <string name="pick_dir_denied">读不了这个目录 (可能没权限)</string>
+    <string name="need_storage_permission">请先允许本应用访问所有文件, 授权后回来再点一次添加</string>
 
     <string name="no_lan_ip">没找到局域网 IP, 请检查网络</string>
     <string name="scan_lan_title">扫描局域网</string>

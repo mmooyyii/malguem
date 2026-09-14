@@ -383,49 +383,47 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
+    // 本地目录只能选不能敲: 电视上输路径太痛苦, 走 DirPicker 一级级点进去
     private void showLocalDialog(String path, Integer editId) {
-        ensureStoragePermission();
-        View dialogView = getLayoutInflater().inflate(R.layout.dialog_local, null);
-        final EditText etPath = dialogView.findViewById(R.id.et_path);
-        if (path != null) {
-            etPath.setText(path);
+        // 没权限时目录一片空白, 先把主人送去授权页, 回来再点一次添加
+        if (!ensureStoragePermission()) {
+            Toast.makeText(this, R.string.need_storage_permission, Toast.LENGTH_LONG).show();
+            return;
         }
-        new AlertDialog.Builder(this)
-                .setTitle(editId == null ? R.string.add_local : R.string.edit_local)
-                .setView(dialogView)
-                .setPositiveButton(getString(editId == null ? R.string.ok_add : R.string.ok_save), (dialog, which) -> {
-                    String p = etPath.getText().toString().trim();
-                    var r = new LocalResource(p);
-                    var db = Database.getInstance(MainActivity.this).getDatabase();
-                    if (editId == null) {
-                        db.add_resource(p, 3, r.to_json());
-                    } else {
-                        db.update_resource(editId, p, 3, r.to_json());
-                    }
-                    Toast.makeText(MainActivity.this, editId == null ? R.string.add_ok : R.string.edit_saved_warn, Toast.LENGTH_LONG).show();
-                    init_resource_list();
-                })
-                .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
-                .show();
+        DirPicker.show(this, path, p -> {
+            var r = new LocalResource(p);
+            var db = Database.getInstance(MainActivity.this).getDatabase();
+            if (editId == null) {
+                db.add_resource(p, 3, r.to_json());
+            } else {
+                db.update_resource(editId, p, 3, r.to_json());
+            }
+            Toast.makeText(MainActivity.this, editId == null ? R.string.add_ok : R.string.edit_saved_warn, Toast.LENGTH_LONG).show();
+            init_resource_list();
+        });
     }
 
-    // 本地硬盘读取需要存储权限: R+ 走"所有文件访问", 以下走运行时 READ_EXTERNAL_STORAGE
-    private void ensureStoragePermission() {
+    // 本地硬盘读取需要存储权限: R+ 走"所有文件访问", 以下走运行时 READ_EXTERNAL_STORAGE.
+    // 返回是否已经拿到权限, 没拿到就顺手拉起授权界面
+    private boolean ensureStoragePermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            if (!Environment.isExternalStorageManager()) {
-                try {
-                    startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                            Uri.parse("package:" + getPackageName())));
-                } catch (Exception e) {
-                    startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
-                }
+            if (Environment.isExternalStorageManager()) {
+                return true;
             }
-        } else {
-            if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
-                    != PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
+            try {
+                startActivity(new Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        Uri.parse("package:" + getPackageName())));
+            } catch (Exception e) {
+                startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
             }
+            return false;
         }
+        if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+                == PackageManager.PERMISSION_GRANTED) {
+            return true;
+        }
+        requestPermissions(new String[]{android.Manifest.permission.READ_EXTERNAL_STORAGE}, 1);
+        return false;
     }
 
 
