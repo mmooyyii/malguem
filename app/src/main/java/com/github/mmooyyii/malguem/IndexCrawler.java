@@ -99,6 +99,9 @@ public class IndexCrawler {
                 if (budget <= 0 || fails >= MAX_CONSECUTIVE_FAILS || Thread.currentThread().isInterrupted()) {
                     break;
                 }
+                if (Books.streamed(uri, client)) {
+                    continue; // 走服务端页流的书不用索引, 建一次就是把整本拉下来
+                }
                 if (Books.index_up_to_date(uri, db.get_epub_index(ns, uri))) {
                     continue; // 已有当前版本的索引; 旧版本(如 v1 无目录)会走重建
                 }

@@ -55,7 +55,8 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
   分段必须按覆盖关系分配 (`assignParts`), 不能按 offset 精确配对
 - OPDS 漫画不走整本随机读, 走服务端页流 (OPDS-PSE): feed 的 entry 里给了 `pse:count` 和带 {pageNumber}
   的模板链接时, `Books.open` 返回 `OpdsBook` (完全不经 LazyZip), 按页号取单张图; 封面用 feed 里的
-  thumbnail (几 KB, 不必为列表上一张小图开整本).
+  thumbnail (几 KB, 不必为列表上一张小图开整本). 这类书不需要索引, IndexCrawler 用 `Books.streamed` 跳过,
+  不然"重建索引"会为每本拉一次整本.
   **坑**: Komga 的下载端点压根不认 Range —— 实测带 Range 的请求照样回 200 + 完整文件 (单段/multi-range 都试过),
   LazyZip 的按需读在它上面退化成"每读一小段拉一次整本" (一本 62MB 的全彩漫画, 翻每页都是 62MB, 走 PSE 后单页 39KB).
   PSE 页号按规范是 0..N-1, **别写成 index+1**: Komga 上首页会错位成第二页, 翻到末页直接 400.

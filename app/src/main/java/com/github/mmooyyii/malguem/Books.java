@@ -50,6 +50,20 @@ public final class Books {
                 : LazyEpub.open(namespace, uri, client, db);
     }
 
+    // 这本书是不是走服务端页流: 是的话开书压根不碰索引 (页数由 pse:count 给, 图按页号取),
+    // 建索引纯属白跑一趟 —— 而对 OPDS 漫画那一趟就是把整本拉下来 (62MB 一本).
+    // IndexCrawler 跑到这一步时目录刚遍历完, 页流信息还在 OpdsResource 的缓存里, 不会多发请求
+    static boolean streamed(String uri, ResourceInterface client) {
+        if (!(client instanceof OpdsResource)) {
+            return false;
+        }
+        try {
+            return ((OpdsResource) client).streamOf(uri) != null;
+        } catch (Exception e) {
+            return false; // 查不出来就当普通书, 大不了照旧建索引
+        }
+    }
+
     // 走网络重新解析并生成索引 json (IndexCrawler 批量建索引用)
     static String build_index(String uri, ResourceInterface client) throws Exception {
         return isCbz(uri)
