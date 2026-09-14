@@ -137,6 +137,7 @@
     <string name="update_now">Update</string>
     <string name="update_later">Later</string>
     <string name="downloading">Downloading %1$s</string>
+    <string name="picking_source">Picking the fastest source…</string>
     <string name="install_perm_title">Install permission required</string>
     <string name="install_perm_msg">First update needs permission to install unknown apps. Installation continues automatically after granting.</string>
     <string name="grant">Grant</string>

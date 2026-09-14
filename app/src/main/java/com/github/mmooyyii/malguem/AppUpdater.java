@@ -41,6 +41,11 @@ public class AppUpdater {
             "https://ghproxy.net/https://github.com/mmooyyii/malguem/releases/latest/download/",
     };
 
+    // 下载前赛马时每个源试拉的字节数: 太小会被握手/RTT 主导, 看不出真实带宽; 太大白费流量
+    private static final int PROBE_BYTES = 256 * 1024;
+    // 赛马总时长上限: 全都慢的时候别一直耗着, 超时就按老办法逐个试
+    private static final int PROBE_TIMEOUT_SEC = 8;
+
     private final AppCompatActivity activity;
     // 连接超时压短: 直连被墙时通常卡在握手, 尽快失败切到下一个源
     private final OkHttpClient client = new OkHttpClient.Builder()
@@ -220,11 +225,26 @@ public class AppUpdater {
                 .create();
         dialog.show();
         new Thread(() -> {
-            // 从检查阶段验证过的源开始, 失败换下一个; 和检查一样逐源记原因
+            // 先赛马挑一个真正快的源; 挑不出来(全都没跑通)再退回原来的办法:
+            // 从检查阶段验证过的源开始逐个试. 两种情况都是失败就换下一个, 并逐源记原因
             var failures = new java.util.ArrayList<String>();
             var list = sources();
-            for (var step = 0; step < list.size(); step++) {
-                var base = list.get((goodSource + step) % list.size());
+            main.post(() -> dialog.setMessage(activity.getString(R.string.picking_source)));
+            var fastest = pickFastest(list);
+            var order = new java.util.ArrayList<String>();
+            if (fastest == null) {
+                for (var step = 0; step < list.size(); step++) {
+                    order.add(list.get((goodSource + step) % list.size()));
+                }
+            } else {
+                order.add(fastest);
+                for (var base : list) {
+                    if (!base.equals(fastest)) {
+                        order.add(base); // 赢家万一中途掉链子, 后面还有得换
+                    }
+                }
+            }
+            for (var base : order) {
                 try {
                     downloadFrom(base, tag, dialog);
                     return;
@@ -240,6 +260,73 @@ public class AppUpdater {
                 showFailures(R.string.download_failed_title, failures);
             });
         }).start();
+    }
+
+    // 下载前赛马: 并发让每个源各拉 apk 开头一小段, 谁先拉完就用谁.
+    // 原来是"第一个连得上的源用到底", 可 version.json 才几十字节, 再慢的源也秒回, 到了几 MB 的
+    // apk 上才原形毕露. 顺带在这里就淘汰掉返回 HTML 错误页的镜像, 不用等整包下完被 looksLikeApk 判死.
+    // 全都没跑通时返回 null, 由调用方退回原来的逐个尝试
+    private String pickFastest(java.util.List<String> list) {
+        var pool = java.util.concurrent.Executors.newFixedThreadPool(Math.min(list.size(), 8));
+        var race = new java.util.concurrent.ExecutorCompletionService<String>(pool);
+        for (var base : list) {
+            race.submit(() -> probe(base));
+        }
+        try {
+            var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(PROBE_TIMEOUT_SEC);
+            for (var i = 0; i < list.size(); i++) {
+                var wait = deadline - System.nanoTime();
+                if (wait <= 0) {
+                    break;
+                }
+                var done = race.poll(wait, TimeUnit.NANOSECONDS);
+                if (done == null) {
+                    break; // 到点了, 剩下的不等
+                }
+                try {
+                    return done.get(); // 最先把这一小段拉完的就是最快的
+                } catch (Exception ignore) {
+                    // 这个源没跑通, 接着等下一个完成
+                }
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            pool.shutdownNow(); // 已经选出赢家, 其余探测连接一并放弃
+        }
+        return null;
+    }
+
+    // 拉 apk 开头 PROBE_BYTES 字节并确认是 zip 头, 通过则返回这个源本身
+    private String probe(String base) throws Exception {
+        var request = buildGet(base + "malguem-tv.apk").newBuilder()
+                .header("Range", "bytes=0-" + (PROBE_BYTES - 1))
+                .build();
+        try (var response = client.newCall(request).execute()) {
+            if (!response.isSuccessful() || response.body() == null) {
+                throw new HttpStatusException(response.code(), "malguem-tv.apk");
+            }
+            var head = new byte[4];
+            var filled = 0;
+            var got = 0;
+            var buf = new byte[16 * 1024];
+            int n;
+            try (var in = response.body().byteStream()) {
+                // 不认 Range 的源会直接给整个 apk, 读够这一小段就断开, 别把整包拖下来
+                while (got < PROBE_BYTES && (n = in.read(buf)) != -1) {
+                    for (var i = 0; i < n && filled < head.length; i++) {
+                        head[filled++] = buf[i];
+                    }
+                    got += n;
+                }
+            }
+            // apk 是 zip, 以 PK\x03\x04 开头; 错误页/门户劫持在这里就出局
+            if (filled < head.length || head[0] != 0x50 || head[1] != 0x4B
+                    || head[2] != 0x03 || head[3] != 0x04) {
+                throw new IllegalStateException("内容不是 apk (镜像可能返回了错误页)");
+            }
+            return base;
+        }
     }
 
     // 从单个源下载到 cache/updates, 校验完整性, 失败抛异常由调用方换源重试

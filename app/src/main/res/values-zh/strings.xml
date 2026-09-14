@@ -124,6 +124,7 @@
     <string name="update_now">更新</string>
     <string name="update_later">下次再说</string>
     <string name="downloading">正在下载 %1$s</string>
+    <string name="picking_source">正在挑选最快的下载源…</string>
     <string name="install_perm_title">需要安装权限</string>
     <string name="install_perm_msg">首次更新需要允许本应用安装未知应用, 授权后会自动继续安装</string>
     <string name="grant">去授权</string>
