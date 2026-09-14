@@ -54,7 +54,11 @@ public class NovelActivity extends AppCompatActivity {
                     + "b.style.margin='0';b.style.padding='0 '+pad+'px';"
                     + "b.style.boxSizing='border-box';b.style.height='100vh';"
                     + "b.style.columnWidth=colW+'px';b.style.columnGap=gap+'px';b.style.columnFill='auto';"
-                    + "d.style.overflow='hidden';b.style.overflow='hidden';"
+                    // 只有根元素能设 overflow:hidden (防止整页滚动). body 千万不能设:
+                    // 多列排版下第二列往后全在 body 的溢出区里, body 一旦 hidden 就把它们裁掉了,
+                    // 而翻页正是用 transform 把这些列平移进视口 —— 移过来的是已被裁掉的区域, 于是第一页
+                    // 正常、往后每页全白. 在 Chrome 上复现并确认过 (同 Blink 内核)
+                    + "d.style.overflow='hidden';"
                     + "b.style.transform='translateX(0)';b.style.transition='none';"
                     + "window.__step=colW+gap;"
                     // 末列不带 gap, 补一个再除, 否则最后一页会被算漏

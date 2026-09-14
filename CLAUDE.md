@@ -78,6 +78,11 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
   v1.11.0 的 OPDS 页流就栽在这: 页码正常 (总页数来自 pse:count), 图一张都出不来
 - 阅读中 OK/菜单键呼出阅读菜单: 目录跳转(`LazyEpub` 解析 ncx/nav, 存进 epub_index, 索引版本 v2) /
   SeekBar 跳页 / 小说字号+夜间(SharedPreferences 全局) / 漫画阅读方向rtl+单页(epub 表按书存) / 互切模式(顶替 Activity)
+- 小说章内翻页靠 CSS 多列 + transform 平移 (`PAGER_INIT`/`PAGER_GO`): body 设 columnWidth + height:100vh
+  排成多列, 翻页把 body 整体 translateX 一个 step (不用 scrollLeft —— 根元素 overflow:hidden 后有的 WebView 无视它).
+  **坑**: 只有根元素能设 overflow:hidden, **body 绝不能设** —— 第二列往后全在 body 的溢出区里,
+  一旦 hidden 就被裁掉, 而翻页移进视口的正是这些列, 表现为第一页正常、往后每页全白 (v1.10.0~v1.11.1 都有).
+  这类纯 CSS/JS 的毛病别靠推理, 拿 Chrome DevTools 跑一遍就能复现 (WebView 同是 Blink 内核)
 - 小说章内进度 page_offset 存万分比而非像素 (字号/夜间重排后按比例恢复); MainActivity 用 onResume 刷新列表
 - 首页最前排是"最近阅读" (`epub.last_read` 倒序, `RecentEpub` 类型条目自带 namespace, 点开直接续读)
 - release 开了 R8: Gson 反射模型(epub/cbz 索引、漫画布局)和 jcifs 的 keep 规则在 proguard-rules.pro.
