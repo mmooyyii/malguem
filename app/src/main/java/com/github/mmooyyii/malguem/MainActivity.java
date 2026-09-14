@@ -113,10 +113,6 @@ public class MainActivity extends AppCompatActivity {
                 IndexCrawler.start(this);
                 break;
             }
-            case ScanSettings: {
-                ScanPortsDialog.show(this);
-                break;
-            }
             case Resource: {
                 var db = Database.getInstance(this).getDatabase();
                 client = db.get_resource(file.id);
@@ -200,20 +196,17 @@ public class MainActivity extends AppCompatActivity {
         dialog.show();
     }
 
-    // 新增数据源: 先选类型, 再进对应配置弹窗
+    // 新增数据源: 先选类型, 再进对应配置弹窗 (不知道服务器 IP 就用弹窗里的"扫描局域网")
     private void showAddChooser() {
-        String[] types = {getString(R.string.source_scan), "WebDAV", "SMB",
-                getString(R.string.source_opds), getString(R.string.source_local)};
+        String[] types = {"WebDAV", "SMB", getString(R.string.source_opds), getString(R.string.source_local)};
         new AlertDialog.Builder(this)
                 .setTitle(R.string.choose_source_type)
                 .setItems(types, (dialog, which) -> {
                     if (which == 0) {
-                        startLanScan();
-                    } else if (which == 1) {
                         showWebdavDialog(null, null, null, null);
-                    } else if (which == 2) {
+                    } else if (which == 1) {
                         showSmbDialog(null, null, null, null, null, null);
-                    } else if (which == 3) {
+                    } else if (which == 2) {
                         showOpdsDialog(null, null, null, null);
                     } else {
                         showLocalDialog(null, null);
@@ -237,6 +230,10 @@ public class MainActivity extends AppCompatActivity {
         if (pass != null) {
             etPassword.setText(pass);
         }
+        // 默认端口按 Komga 给, 扫到后按端口补上各家的 opds 路径
+        dialogView.findViewById(R.id.btn_scan).setOnClickListener(v ->
+                LanScanDialog.show(this, 25600, (ip, port) ->
+                        etUrl.setText("http://" + ip + ":" + port + opdsPath(port))));
         new AlertDialog.Builder(this)
                 .setTitle(editId == null ? R.string.add_opds : R.string.edit_opds)
                 .setView(dialogView)
@@ -258,77 +255,18 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    // 扫描本机所在 /24 网段, 端口清单来自"扫描设置" (默认 alist/SMB/Komga/Kavita/Calibre-Web), 免得对着遥控器敲 IP
-    private void startLanScan() {
-        var ip = LanScanner.localIp();
-        if (ip == null) {
-            Toast.makeText(this, R.string.no_lan_ip, Toast.LENGTH_SHORT).show();
-            return;
+    // 各家 OPDS 的目录路径, 扫到端口后顺手补上, 省得主人在电视上敲一长串
+    private static String opdsPath(int port) {
+        switch (port) {
+            case 25600:
+                return "/opds/v1.2/catalog"; // Komga
+            case 5000:
+                return "/api/opds"; // Kavita (还要接自己的 api key)
+            case 8083:
+                return "/opds"; // Calibre-Web
+            default:
+                return "";
         }
-        var configured = ScanPort.load(this);
-        var ports = ScanPort.enabledPorts(configured);
-        if (ports.length == 0) {
-            Toast.makeText(this, R.string.scan_no_port, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        var subnet = ip.substring(0, ip.lastIndexOf('.'));
-        var portText = new StringBuilder();
-        for (var p : configured) {
-            if (p.on) {
-                portText.append(portText.length() == 0 ? "" : ", ").append(p.port);
-            }
-        }
-        var progress = new AlertDialog.Builder(this)
-                .setTitle(R.string.scan_lan_title)
-                .setMessage(getString(R.string.scanning, subnet, portText.toString()))
-                .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
-                .create();
-        progress.show();
-        new Thread(() -> {
-            var hits = LanScanner.scan(ip, ports);
-            runOnUiThread(() -> {
-                if (isDestroyed() || !progress.isShowing()) {
-                    return; // 用户已取消或界面已销毁, 丢弃结果
-                }
-                progress.dismiss();
-                showScanResults(hits, configured);
-            });
-        }, "lan-scanner").start();
-    }
-
-    private void showScanResults(List<LanScanner.Hit> hits, List<ScanPort> configured) {
-        if (hits.isEmpty()) {
-            Toast.makeText(this, R.string.scan_empty, Toast.LENGTH_SHORT).show();
-            return;
-        }
-        var labels = new String[hits.size()];
-        for (int i = 0; i < hits.size(); i++) {
-            var h = hits.get(i);
-            var p = ScanPort.byPort(configured, h.port);
-            labels[i] = h.ip + "  ·  " + (p == null ? String.valueOf(h.port) : p.name);
-        }
-        new AlertDialog.Builder(this)
-                .setTitle(R.string.scan_found)
-                .setItems(labels, (dialog, which) -> {
-                    var h = hits.get(which);
-                    var p = ScanPort.byPort(configured, h.port);
-                    if (p == null) {
-                        return;
-                    }
-                    // 扫到什么服务就开什么添加弹窗, 地址按该服务的默认路径预填 (alist 的 /dav、Komga 的 /opds/v1.2/catalog 等)
-                    switch (p.kind) {
-                        case ScanPort.KIND_SMB:
-                            showSmbDialog(h.ip, null, null, null, null, null);
-                            break;
-                        case ScanPort.KIND_OPDS:
-                            showOpdsDialog(p.url(h.ip), null, null, null);
-                            break;
-                        default:
-                            showWebdavDialog(p.url(h.ip), null, null, null);
-                    }
-                })
-                .setNegativeButton(R.string.cancel, null)
-                .show();
     }
 
     // editId 为 null 是新增, 否则是编辑该 id 的数据源 (update 保 id, 进度不丢)
@@ -346,6 +284,10 @@ public class MainActivity extends AppCompatActivity {
         if (pass != null) {
             etPassword.setText(pass);
         }
+        // 默认端口按 alist 给, 扫到 5244 就顺手补上它的 /dav
+        dialogView.findViewById(R.id.btn_scan).setOnClickListener(v ->
+                LanScanDialog.show(this, 5244, (ip, port) ->
+                        etUrl.setText("http://" + ip + ":" + port + (port == 5244 ? "/dav" : "/"))));
         new AlertDialog.Builder(this)
                 .setTitle(editId == null ? R.string.add_webdav : R.string.edit_webdav)
                 .setView(dialogView)
@@ -385,6 +327,9 @@ public class MainActivity extends AppCompatActivity {
         if (pass != null) {
             etPassword.setText(pass);
         }
+        // SMB 端口固定 445, 扫到的只回填 IP (jcifs 连的是默认端口)
+        dialogView.findViewById(R.id.btn_scan).setOnClickListener(v ->
+                LanScanDialog.show(this, 445, (ip, port) -> etHost.setText(ip)));
         // 弹窗里不放 domain 输入, 编辑时原样保留
         final String keepDomain = domain == null ? "" : domain;
         new AlertDialog.Builder(this)
@@ -482,7 +427,6 @@ public class MainActivity extends AppCompatActivity {
         list.add(new ListItem(0, getString(R.string.section_tools), ListItem.FileType.Header));
         list.add(new ListItem(0, getString(R.string.check_update), ListItem.FileType.CheckUpdate));
         list.add(new ListItem(0, getString(R.string.rebuild_index), ListItem.FileType.RebuildIndex));
-        list.add(new ListItem(0, getString(R.string.scan_settings), ListItem.FileType.ScanSettings));
         fileListAdapter.setClient(null);
         fileListAdapter.setItems(list);
         findViewById(R.id.listLoading).setVisibility(View.GONE);

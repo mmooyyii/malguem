@@ -12,22 +12,12 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-// 局域网嗅探: 对本机所在 /24 网段逐个 IP 探测指定 TCP 端口, 扫哪些端口由 ScanPort 决定.
+// 局域网嗅探: 对本机所在 /24 网段的 254 个 IP 逐个探测同一个 TCP 端口.
 // 端口能连上即视为候选数据源, 是不是真服务留给添加后的实际访问去校验
 public class LanScanner {
 
     private static final int CONNECT_TIMEOUT_MS = 400;
     private static final int THREADS = 64;
-
-    public static class Hit {
-        public final String ip;
-        public final int port;
-
-        public Hit(String ip, int port) {
-            this.ip = ip;
-            this.port = port;
-        }
-    }
 
     // 本机 site-local IPv4; 电视可能走以太网而不是 WiFi, 所以枚举 NetworkInterface 而不是查 WifiManager
     public static String localIp() {
@@ -51,22 +41,20 @@ public class LanScanner {
         return null;
     }
 
-    // 阻塞扫描整个 /24 网段, 必须在后台线程调用; 返回按 IP、端口排序的命中列表
-    public static List<Hit> scan(String localIp, int[] ports) {
+    // 阻塞扫描整个 /24 网段的某个端口, 必须在后台线程调用; 返回按末段数值排序的 IP
+    public static List<String> scan(String localIp, int port) {
         var prefix = localIp.substring(0, localIp.lastIndexOf('.') + 1);
-        var hits = Collections.synchronizedList(new ArrayList<Hit>());
+        var hits = Collections.synchronizedList(new ArrayList<String>());
         var pool = Executors.newFixedThreadPool(THREADS);
         for (int i = 1; i <= 254; i++) {
             final var ip = prefix + i;
-            for (var port : ports) {
-                pool.execute(() -> {
-                    try (var s = new Socket()) {
-                        s.connect(new InetSocketAddress(ip, port), CONNECT_TIMEOUT_MS);
-                        hits.add(new Hit(ip, port));
-                    } catch (Exception ignore) {
-                    }
-                });
-            }
+            pool.execute(() -> {
+                try (var s = new Socket()) {
+                    s.connect(new InetSocketAddress(ip, port), CONNECT_TIMEOUT_MS);
+                    hits.add(ip);
+                } catch (Exception ignore) {
+                }
+            });
         }
         pool.shutdown();
         try {
@@ -75,9 +63,7 @@ public class LanScanner {
             Thread.currentThread().interrupt();
         }
         var out = new ArrayList<>(hits);
-        out.sort(Comparator
-                .comparingInt((Hit h) -> Integer.parseInt(h.ip.substring(h.ip.lastIndexOf('.') + 1)))
-                .thenComparingInt(h -> h.port));
+        out.sort(Comparator.comparingInt(ip -> Integer.parseInt(ip.substring(ip.lastIndexOf('.') + 1))));
         return out;
     }
 }

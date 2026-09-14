@@ -24,10 +24,9 @@
     <string name="rebuild_started">Rebuilding index in background…</string>
     <string name="edit_saved_warn">Saved. If the address/folder changed, old progress and recents may not resolve.</string>
     <string name="choose_source_type">Source type</string>
-    <string name="source_scan">Scan LAN (alist / SMB / OPDS)</string>
     <string name="source_opds" translatable="false">OPDS (Komga/Kavita/Calibre-Web)</string>
     <string name="source_local">Local storage</string>
-    <string name="empty_hint">Library is empty\n\nPress OK to add a source\nLAN scan finds alist / SMB / OPDS servers</string>
+    <string name="empty_hint">Library is empty\n\nPress OK to add a source\nThe address field can scan the LAN for you</string>
     <string name="db_error">Database error</string>
     <string name="source_gone">This source has been deleted</string>
     <string name="confirm_delete">Delete this source?</string>
@@ -60,22 +59,15 @@
 
     <!-- 局域网扫描 -->
     <string name="no_lan_ip">No LAN IP found, check the network</string>
-    <string name="scan_lan_title">Scanning LAN</string>
-    <string name="scanning">Scanning %1$s.1-254, ports %2$s…</string>
+    <string name="scan_lan_title">Scan LAN</string>
+    <string name="scan_lan_button">Scan LAN…</string>
+    <string name="scan_start">Start</string>
+    <string name="label_scan_port">Port</string>
+    <string name="scan_port_hint">Probes the 254 IPs of this subnet and lists whoever answers on that port</string>
+    <string name="scanning">Scanning %1$s.1-254, port %2$s…</string>
     <string name="scan_empty">No service found</string>
     <string name="scan_found">Services found</string>
-    <string name="scan_no_port">All scan ports are disabled — enable some in Scan settings</string>
-
-    <string name="scan_settings">Scan settings</string>
-    <string name="scan_port_hint">OK toggles, long-press OK deletes a custom port</string>
-    <string name="scan_port_add">Add port</string>
-    <string name="scan_port_builtin">Built-in ports can be disabled but not deleted</string>
     <string name="scan_port_bad">Invalid port (1-65535)</string>
-    <string name="label_port_name">Name</string>
-    <string name="hint_port_name">My Komga</string>
-    <string name="label_port">Port</string>
-    <string name="label_port_kind">Source type</string>
-    <string name="label_port_path">Path (prefilled into the address; may be empty)</string>
 
     <!-- 条目菜单 -->
     <string name="menu_switch_view">Switch comic/novel</string>

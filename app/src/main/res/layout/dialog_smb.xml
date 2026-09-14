@@ -23,6 +23,15 @@
         android:inputType="text"
         style="@style/Edit.Field" />
 
+    <!-- 不知道服务器 IP 时: 填端口扫一遍局域网, 选中的地址回填进上面的服务器地址 -->
+    <Button
+        android:id="@+id/btn_scan"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="6dp"
+        android:text="@string/scan_lan_button"
+        style="@style/Widget.AppCompat.Button.Borderless.Colored" />
+
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"

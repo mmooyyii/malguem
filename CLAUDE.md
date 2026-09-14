@@ -54,9 +54,10 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
 - `WebdavResource` 处理 multipart range 响应; 注意服务器可能合并相邻 range (RFC 7233),
   分段必须按覆盖关系分配 (`assignParts`), 不能按 offset 精确配对
 - 本地数据源只能用 `DirPicker` 选目录 (存储卷列表 → 逐级进目录), 不给手敲路径的入口: 遥控器打字太痛苦
-- 局域网扫描的端口清单在 `ScanPort` (存 SharedPreferences 的 json, org.json 手解), 内置 alist 5244 / SMB 445 /
-  Komga 25600 / Kavita 5000 / Calibre-Web 8083, 每项带 kind+path, 扫到后按 kind 开对应添加弹窗并预填地址;
-  首页工具区的"扫描设置" (`ScanPortsDialog`) 里 OK 开关、长按 OK 删自定义项、按钮加新端口
+- 局域网扫描 (`LanScanDialog`) 挂在 WebDAV/SMB/OPDS 三个添加弹窗的"扫描局域网"按钮上, 不是全局设置:
+  填一个端口 → 扫本机 /24 网段 254 个 IP → 选中的 IP 回填进地址框 (webdav 默认 5244 补 /dav,
+  opds 默认 25600 并按端口补 Komga/Kavita/Calibre-Web 的目录路径, smb 只回填 IP).
+  做成配置项被否过一次: 扫描是"不知道服务器 IP"时的一次性辅助, 不是要长期维护的设置
 - 阅读界面: `NovelActivity` (WebView 翻章) / `ComicActivity` (左右双栏), 文件列表菜单键/长按OK切换两种模式;
   两个 Activity 用 `Theme.Malguem.Reader` (windowFullscreen) + `Fullscreen.apply` 藏掉系统栏,
   阅读菜单关掉会让窗口重新获焦, 所以 onWindowFocusChanged 里要再藏一次
