@@ -374,6 +374,7 @@ public class AppUpdater {
             if (!looksLikeApk(out)) {
                 throw new IllegalStateException("内容不是 apk (镜像可能返回了错误页)");
             }
+            verifyVersion(out, tag);
             apkFile = out;
             main.post(() -> {
                 if (activity.isDestroyed()) {
@@ -382,6 +383,22 @@ public class AppUpdater {
                 dialog.dismiss();
                 install();
             });
+        }
+    }
+
+    // 下完还要确认这个包真是 version.json 说的那一版, 只验"是不是 zip"不够.
+    // jsDelivr 这类 CDN 按文件各自缓存, @release 又是分支引用 (分支缓存 12 小时), 出现过
+    // 18 字节的 version.json 已经刷新成新版、2MB 的 apk 还停在上一版的情况: 客户端于是
+    // "检测到新版本 -> 下回来一个旧包 -> 装完版本没变", 用户看到的就是"升级失败".
+    // 版本对不上就抛异常, 由调用方换下一个源 —— 和其他失败一样的处理
+    private void verifyVersion(File apk, String tag) throws Exception {
+        var info = activity.getPackageManager().getPackageArchiveInfo(apk.getAbsolutePath(), 0);
+        if (info == null) {
+            throw new IllegalStateException("apk 解析不了 (下载可能损坏)");
+        }
+        // versionName 由 CI 按 tag 名注入, 两边应当逐字相同
+        if (!tag.equals(info.versionName)) {
+            throw new IllegalStateException("版本对不上: 要 " + tag + ", 这个源给的是 " + info.versionName);
         }
     }
 

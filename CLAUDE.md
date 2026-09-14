@@ -39,6 +39,12 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
 - Release 资产用**固定文件名**: `malguem-tv.apk` 与 `version.json` (`{"tag":"..."}`);
   客户端走 `releases/latest/download/<固定名>` 这个 GitHub 固定重定向 URL, 不依赖 api.github.com
 - 更新逻辑在 `AppUpdater.java`; `SOURCES` 数组是"直连 → ghproxy 镜像"候选源, 依次尝试, 镜像失效在那里换域名
+- 下载完必须校验包里的 versionName 和 version.json 的 tag 逐字相同 (`verifyVersion`), 只验"是不是 zip"不够.
+  **坑**: jsDelivr 按文件各自缓存, `@release` 又是分支引用 (分支缓存 12 小时), 真出现过 18 字节的
+  version.json 已经刷新成新版、2MB 的 apk 还停在上一版 —— 客户端"检测到新版本 → 下回来一个旧包 →
+  装完 versionCode 没变", 用户看到的就是"apk 有但升级失败" (v1.11.0→v1.11.2 实打实踩到).
+  版本对不上就抛异常换下一个源. 另外 CI 里 purge jsDelivr 要先 sleep 再打: 刚 push 完 GitHub raw
+  未必同步好, 这时 purge 触发回源拿到的还是旧内容, 等于把旧版又缓存一轮
 - OTA 覆盖安装要求签名一致: 电视上必须装 CI 签名的包, 本地 debug 包装不上去
 
 ## 架构速记

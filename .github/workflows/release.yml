@@ -81,8 +81,12 @@ jobs:
           git push --force "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" release:release
 
       - name: Purge jsDelivr cache
-        # @branch 的 URL 有边缘缓存, 主动 purge 让新版本尽快可见 (失败不影响发版)
+        # @branch 的 URL 有边缘缓存, 主动 purge 让新版本尽快可见 (失败不影响发版).
+        # 先等一会再 purge: 刚 push 完 GitHub 的 raw 未必同步好, 这时 purge 触发 jsDelivr 回源,
+        # 拿到的还是旧内容, 等于把旧版又缓存了一轮 —— v1.11.2 就是这么变成
+        # "version.json 已是新版、apk 还是上一版", 客户端下回来一个旧包, 装完版本没变
         run: |
+          sleep 30
           curl -s -m 30 "https://purge.jsdelivr.net/gh/${{ github.repository }}@release/version.json" || true
           curl -s -m 30 "https://purge.jsdelivr.net/gh/${{ github.repository }}@release/malguem-tv.apk" || true
 
