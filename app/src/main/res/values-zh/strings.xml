@@ -20,9 +20,9 @@
     <string name="rebuild_started">开始后台重建索引…</string>
     <string name="edit_saved_warn">已保存 (若地址/目录变了, 旧的进度和最近阅读会找不到文件)</string>
     <string name="choose_source_type">选择数据源类型</string>
-    <string name="source_scan">扫描局域网 (alist/SMB)</string>
+    <string name="source_scan">扫描局域网 (alist / SMB / OPDS)</string>
     <string name="source_local">本地硬盘</string>
-    <string name="empty_hint">书库还是空的\n\n按 OK 键添加数据源\n支持自动扫描局域网里的 alist / SMB</string>
+    <string name="empty_hint">书库还是空的\n\n按 OK 键添加数据源\n支持扫描局域网里的 alist / SMB / OPDS 书库</string>
     <string name="db_error">数据库异常</string>
     <string name="source_gone">数据源已被删除</string>
     <string name="confirm_delete">确认删除该数据源?</string>
@@ -53,9 +53,21 @@
 
     <string name="no_lan_ip">没找到局域网 IP, 请检查网络</string>
     <string name="scan_lan_title">扫描局域网</string>
-    <string name="scanning">正在扫描 %1$s.1-254 的 5244(alist) / 445(SMB) 端口…</string>
-    <string name="scan_empty">没有扫到 alist / SMB 服务</string>
+    <string name="scanning">正在扫描 %1$s.1-254 的 %2$s 端口…</string>
+    <string name="scan_empty">没有扫到服务</string>
     <string name="scan_found">发现的服务</string>
+    <string name="scan_no_port">扫描端口全被停用了, 去"扫描设置"里打开几个</string>
+
+    <string name="scan_settings">扫描设置</string>
+    <string name="scan_port_hint">OK 键开关, 长按 OK 删除自定义端口</string>
+    <string name="scan_port_add">添加端口</string>
+    <string name="scan_port_builtin">内置端口只能停用, 不能删</string>
+    <string name="scan_port_bad">端口号不对 (1-65535)</string>
+    <string name="label_port_name">名称</string>
+    <string name="hint_port_name">我的 Komga</string>
+    <string name="label_port">端口</string>
+    <string name="label_port_kind">数据源类型</string>
+    <string name="label_port_path">路径 (扫到后预填进地址, 可留空)</string>
 
     <string name="menu_switch_view">切换 漫画/小说</string>
     <string name="menu_remove_recent">从最近阅读移除</string>

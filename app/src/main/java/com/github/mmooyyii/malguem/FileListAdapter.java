@@ -82,6 +82,7 @@ public class FileListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
                 return TYPE_HEADER;
             case CheckUpdate:
             case RebuildIndex:
+            case ScanSettings:
                 return TYPE_TOOL;
             default:
                 return TYPE_ITEM;
@@ -110,8 +111,13 @@ public class FileListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
         }
         if (holder instanceof ToolVH) {
             ToolVH t = (ToolVH) holder;
-            t.icon.setImageResource(item.type == ListItem.FileType.CheckUpdate
-                    ? R.drawable.ic_update : R.drawable.ic_reindex);
+            int icon = R.drawable.ic_reindex;
+            if (item.type == ListItem.FileType.CheckUpdate) {
+                icon = R.drawable.ic_update;
+            } else if (item.type == ListItem.FileType.ScanSettings) {
+                icon = R.drawable.ic_settings;
+            }
+            t.icon.setImageResource(icon);
             t.label.setText(item.name);
             t.itemView.setOnClickListener(v -> {
                 if (action != null) {

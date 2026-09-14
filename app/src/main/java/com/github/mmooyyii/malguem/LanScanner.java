@@ -12,12 +12,9 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
-// 局域网嗅探: 对本机所在 /24 网段逐个 IP 探测指定 TCP 端口 (alist 5244 / SMB 445).
+// 局域网嗅探: 对本机所在 /24 网段逐个 IP 探测指定 TCP 端口, 扫哪些端口由 ScanPort 决定.
 // 端口能连上即视为候选数据源, 是不是真服务留给添加后的实际访问去校验
 public class LanScanner {
-
-    public static final int PORT_ALIST = 5244;
-    public static final int PORT_SMB = 445;
 
     private static final int CONNECT_TIMEOUT_MS = 400;
     private static final int THREADS = 64;

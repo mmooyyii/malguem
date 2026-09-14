@@ -53,7 +53,13 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
 - 两种格式的索引共用 epub_index 表: epub 索引是 `{"v":2,...}`, cbz 是 `{"v":1,"kind":"cbz",...}`, 靠 kind 区分
 - `WebdavResource` 处理 multipart range 响应; 注意服务器可能合并相邻 range (RFC 7233),
   分段必须按覆盖关系分配 (`assignParts`), 不能按 offset 精确配对
-- 阅读界面: `NovelActivity` (WebView 翻章) / `ComicActivity` (左右双栏), 文件列表菜单键/长按OK切换两种模式
+- 本地数据源只能用 `DirPicker` 选目录 (存储卷列表 → 逐级进目录), 不给手敲路径的入口: 遥控器打字太痛苦
+- 局域网扫描的端口清单在 `ScanPort` (存 SharedPreferences 的 json, org.json 手解), 内置 alist 5244 / SMB 445 /
+  Komga 25600 / Kavita 5000 / Calibre-Web 8083, 每项带 kind+path, 扫到后按 kind 开对应添加弹窗并预填地址;
+  首页工具区的"扫描设置" (`ScanPortsDialog`) 里 OK 开关、长按 OK 删自定义项、按钮加新端口
+- 阅读界面: `NovelActivity` (WebView 翻章) / `ComicActivity` (左右双栏), 文件列表菜单键/长按OK切换两种模式;
+  两个 Activity 用 `Theme.Malguem.Reader` (windowFullscreen) + `Fullscreen.apply` 藏掉系统栏,
+  阅读菜单关掉会让窗口重新获焦, 所以 onWindowFocusChanged 里要再藏一次
 - 阅读中 OK/菜单键呼出阅读菜单: 目录跳转(`LazyEpub` 解析 ncx/nav, 存进 epub_index, 索引版本 v2) /
   SeekBar 跳页 / 小说字号+夜间(SharedPreferences 全局) / 漫画阅读方向rtl+单页(epub 表按书存) / 互切模式(顶替 Activity)
 - 小说章内进度 page_offset 存万分比而非像素 (字号/夜间重排后按比例恢复); MainActivity 用 onResume 刷新列表

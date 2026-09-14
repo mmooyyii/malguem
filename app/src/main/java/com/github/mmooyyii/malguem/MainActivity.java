@@ -113,6 +113,10 @@ public class MainActivity extends AppCompatActivity {
                 IndexCrawler.start(this);
                 break;
             }
+            case ScanSettings: {
+                ScanPortsDialog.show(this);
+                break;
+            }
             case Resource: {
                 var db = Database.getInstance(this).getDatabase();
                 client = db.get_resource(file.id);
@@ -254,33 +258,45 @@ public class MainActivity extends AppCompatActivity {
                 .show();
     }
 
-    // 扫描本机所在 /24 网段的 alist(5244)/SMB(445) 端口, 免得对着遥控器敲 IP
+    // 扫描本机所在 /24 网段, 端口清单来自"扫描设置" (默认 alist/SMB/Komga/Kavita/Calibre-Web), 免得对着遥控器敲 IP
     private void startLanScan() {
         var ip = LanScanner.localIp();
         if (ip == null) {
             Toast.makeText(this, R.string.no_lan_ip, Toast.LENGTH_SHORT).show();
             return;
         }
+        var configured = ScanPort.load(this);
+        var ports = ScanPort.enabledPorts(configured);
+        if (ports.length == 0) {
+            Toast.makeText(this, R.string.scan_no_port, Toast.LENGTH_SHORT).show();
+            return;
+        }
         var subnet = ip.substring(0, ip.lastIndexOf('.'));
+        var portText = new StringBuilder();
+        for (var p : configured) {
+            if (p.on) {
+                portText.append(portText.length() == 0 ? "" : ", ").append(p.port);
+            }
+        }
         var progress = new AlertDialog.Builder(this)
                 .setTitle(R.string.scan_lan_title)
-                .setMessage(getString(R.string.scanning, subnet))
+                .setMessage(getString(R.string.scanning, subnet, portText.toString()))
                 .setNegativeButton(R.string.cancel, (dialog, which) -> dialog.dismiss())
                 .create();
         progress.show();
         new Thread(() -> {
-            var hits = LanScanner.scan(ip, new int[]{LanScanner.PORT_ALIST, LanScanner.PORT_SMB});
+            var hits = LanScanner.scan(ip, ports);
             runOnUiThread(() -> {
                 if (isDestroyed() || !progress.isShowing()) {
                     return; // 用户已取消或界面已销毁, 丢弃结果
                 }
                 progress.dismiss();
-                showScanResults(hits);
+                showScanResults(hits, configured);
             });
         }, "lan-scanner").start();
     }
 
-    private void showScanResults(List<LanScanner.Hit> hits) {
+    private void showScanResults(List<LanScanner.Hit> hits, List<ScanPort> configured) {
         if (hits.isEmpty()) {
             Toast.makeText(this, R.string.scan_empty, Toast.LENGTH_SHORT).show();
             return;
@@ -288,17 +304,27 @@ public class MainActivity extends AppCompatActivity {
         var labels = new String[hits.size()];
         for (int i = 0; i < hits.size(); i++) {
             var h = hits.get(i);
-            labels[i] = h.ip + (h.port == LanScanner.PORT_ALIST ? "  ·  alist (WebDAV)" : "  ·  SMB");
+            var p = ScanPort.byPort(configured, h.port);
+            labels[i] = h.ip + "  ·  " + (p == null ? String.valueOf(h.port) : p.name);
         }
         new AlertDialog.Builder(this)
                 .setTitle(R.string.scan_found)
                 .setItems(labels, (dialog, which) -> {
                     var h = hits.get(which);
-                    if (h.port == LanScanner.PORT_ALIST) {
-                        // alist 的 WebDAV 挂在 /dav 下
-                        showWebdavDialog("http://" + h.ip + ":" + LanScanner.PORT_ALIST + "/dav", null, null, null);
-                    } else {
-                        showSmbDialog(h.ip, null, null, null, null, null);
+                    var p = ScanPort.byPort(configured, h.port);
+                    if (p == null) {
+                        return;
+                    }
+                    // 扫到什么服务就开什么添加弹窗, 地址按该服务的默认路径预填 (alist 的 /dav、Komga 的 /opds/v1.2/catalog 等)
+                    switch (p.kind) {
+                        case ScanPort.KIND_SMB:
+                            showSmbDialog(h.ip, null, null, null, null, null);
+                            break;
+                        case ScanPort.KIND_OPDS:
+                            showOpdsDialog(p.url(h.ip), null, null, null);
+                            break;
+                        default:
+                            showWebdavDialog(p.url(h.ip), null, null, null);
                     }
                 })
                 .setNegativeButton(R.string.cancel, null)
@@ -456,6 +482,7 @@ public class MainActivity extends AppCompatActivity {
         list.add(new ListItem(0, getString(R.string.section_tools), ListItem.FileType.Header));
         list.add(new ListItem(0, getString(R.string.check_update), ListItem.FileType.CheckUpdate));
         list.add(new ListItem(0, getString(R.string.rebuild_index), ListItem.FileType.RebuildIndex));
+        list.add(new ListItem(0, getString(R.string.scan_settings), ListItem.FileType.ScanSettings));
         fileListAdapter.setClient(null);
         fileListAdapter.setItems(list);
         findViewById(R.id.listLoading).setVisibility(View.GONE);
