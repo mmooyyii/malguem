@@ -53,6 +53,14 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
 - 两种格式的索引共用 epub_index 表: epub 索引是 `{"v":2,...}`, cbz 是 `{"v":1,"kind":"cbz",...}`, 靠 kind 区分
 - `WebdavResource` 处理 multipart range 响应; 注意服务器可能合并相邻 range (RFC 7233),
   分段必须按覆盖关系分配 (`assignParts`), 不能按 offset 精确配对
+- OPDS 漫画不走整本随机读, 走服务端页流 (OPDS-PSE): feed 的 entry 里给了 `pse:count` 和带 {pageNumber}
+  的模板链接时, `Books.open` 返回 `OpdsBook` (完全不经 LazyZip), 按页号取单张图; 封面用 feed 里的
+  thumbnail (几 KB, 不必为列表上一张小图开整本).
+  **坑**: Komga 的下载端点压根不认 Range —— 实测带 Range 的请求照样回 200 + 完整文件 (单段/multi-range 都试过),
+  LazyZip 的按需读在它上面退化成"每读一小段拉一次整本" (一本 62MB 的全彩漫画, 翻每页都是 62MB, 走 PSE 后单页 39KB).
+  PSE 页号按规范是 0..N-1, **别写成 index+1**: Komga 上首页会错位成第二页, 翻到末页直接 400.
+  文字 epub 服务端不给 PSE link (硬打 pages 端点返回 500), 所以小说模式照走 LazyEpub —— NovelActivity
+  专门用 `Books.openText`, 不能让页流顶替文字流 (那边给的是图片, 字号/夜间/重排全废)
 - 本地数据源只能用 `DirPicker` 选目录 (存储卷列表 → 逐级进目录), 不给手敲路径的入口: 遥控器打字太痛苦
 - 局域网扫描 (`LanScanDialog`) 挂在 WebDAV/SMB/OPDS 三个添加弹窗的"扫描局域网"按钮上, 不是全局设置:
   填一个端口 → 扫本机 /24 网段 254 个 IP → 选中的 IP 回填进地址框 (webdav 默认 5244 补 /dav,

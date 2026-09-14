@@ -26,6 +26,12 @@ public class OpdsResource implements ResourceInterface {
 
     private static final int MAX_FEED_PAGES = 50; // 单层 feed 跟随 rel=next 分页的上限, Komga 默认每页几十条
 
+    // OPDS Page Streaming Extension: 服务端把漫画拆好页, 客户端按页号取图. 见 OpdsBook
+    private static final String PSE_NS = "http://vaemendis.net/opds-pse/ns";
+    private static final String PSE_STREAM_REL = "http://vaemendis.net/opds-pse/stream";
+    private static final String THUMBNAIL_REL = "http://opds-spec.org/image/thumbnail";
+    private static final String IMAGE_REL = "http://opds-spec.org/image";
+
     final String url; // 根 catalog 地址, 如 http://host:25600/opds/v1.2/catalog
     final String username;
     final String password;
@@ -33,6 +39,9 @@ public class OpdsResource implements ResourceInterface {
     private transient OkHttpClient client;
     private transient WebdavResource http; // 只用它的 open(): base 传空串, 直接喂绝对下载链接
     private final transient HashMap<String, String> hrefByUri = new HashMap<>(); // "/系列/书.epub" -> 绝对下载链接
+    private final transient HashMap<String, OpdsBook.Stream> streamByUri = new HashMap<>(); // 同上 -> 页流信息(漫画才有)
+    // 已经 ls 过的目录: 扫过一遍还没有页流, 那这层的书就是真没有, 别为每本再跑一趟目录
+    private final transient HashSet<String> scannedDirs = new HashSet<>();
 
     OpdsResource(String url, String username, String password) {
         this.url = url == null ? "" : url;
@@ -81,11 +90,50 @@ public class OpdsResource implements ResourceInterface {
                 out.add(new ListItem(resource_id, name, ListItem.FileType.Epub));
                 // 顺手缓存 uri -> 下载链接, open 时免得再走一遍目录
                 hrefByUri.put(prefix + "/" + name, e.bookHref);
+                var stream = e.toStream();
+                if (stream != null) {
+                    streamByUri.put(prefix + "/" + name, stream);
+                }
             } else if (e.navHref != null) {
                 out.add(new ListItem(resource_id, e.title, ListItem.FileType.Dir));
             }
         }
+        scannedDirs.add(prefix.toString());
         return out;
+    }
+
+    // 书的 uri -> 页流信息; 小说和不支持 PSE 的服务端返回 null, 调用方退回整本随机读.
+    // 和 resolveHref 一样, 缓存没命中就按目录名从根走一遍
+    OpdsBook.Stream streamOf(String uri) throws Exception {
+        var cached = streamByUri.get(uri);
+        if (cached != null) {
+            return cached;
+        }
+        var slash = uri.lastIndexOf('/');
+        if (scannedDirs.contains(slash < 0 ? "" : uri.substring(0, slash))) {
+            return null; // 这一层扫过了, 这本确实没有页流
+        }
+        var parts = uri.split("/");
+        var path = new ArrayList<String>();
+        for (int i = 1; i < parts.length - 1; i++) {
+            path.add(parts[i]);
+        }
+        ls(0, path);
+        return streamByUri.get(uri);
+    }
+
+    // 拉一个绝对地址的字节 (页面图/缩略图), 带上这个数据源的认证
+    byte[] fetch(String absUrl) throws Exception {
+        var b = new Request.Builder().url(absUrl);
+        if (!username.isEmpty() || !password.isEmpty()) {
+            b.addHeader("Authorization", Credentials.basic(username, password));
+        }
+        try (var response = httpClient().newCall(b.build()).execute()) {
+            if (!response.isSuccessful() || response.body() == null) {
+                throw new HttpStatusException(response.code(), absUrl);
+            }
+            return response.body().bytes();
+        }
     }
 
     @Override
@@ -131,6 +179,20 @@ public class OpdsResource implements ResourceInterface {
         String navHref;  // 子目录 feed
         String bookHref; // epub 下载链接
         String ext;      // ".epub"
+        String pseHref;  // 页流地址(带 {pageNumber} 占位), 服务端只对图片型漫画给
+        int pseCount;    // pse:count, 总页数
+        String thumbHref; // 封面缩略图
+
+        OpdsBook.Stream toStream() {
+            if (pseHref == null || pseCount <= 0) {
+                return null;
+            }
+            var s = new OpdsBook.Stream();
+            s.href = pseHref;
+            s.count = pseCount;
+            s.thumbHref = thumbHref;
+            return s;
+        }
     }
 
     // 拉一层 feed, 跟随 rel=next 分页; 标题内的 "/" 会破坏 pwd 模型, 换成 "∕"; 同层重名加序号去重
@@ -227,6 +289,13 @@ public class OpdsResource implements ResourceInterface {
                         entry.bookHref = resolve(baseUrl, href);
                         entry.ext = ".cbz";
                     }
+                } else if (PSE_STREAM_REL.equals(rel)) {
+                    entry.pseHref = resolve(baseUrl, href);
+                    entry.pseCount = parsePseCount(child);
+                } else if (THUMBNAIL_REL.equals(rel)) {
+                    entry.thumbHref = resolve(baseUrl, href); // 缩略图最小, 优先当封面
+                } else if (IMAGE_REL.equals(rel) && entry.thumbHref == null) {
+                    entry.thumbHref = resolve(baseUrl, href);
                 } else if (entry.navHref == null
                         && (type.contains("profile=opds-catalog") || "subsection".equals(rel))) {
                     entry.navHref = resolve(baseUrl, href);
@@ -244,6 +313,19 @@ public class OpdsResource implements ResourceInterface {
             entry.navHref = null;
         }
         return entry;
+    }
+
+    // 解析器默认不感知 namespace, 属性名就是字面的 "pse:count"; 真开了感知再按 NS 取一次
+    private static int parsePseCount(Element link) {
+        var v = link.getAttribute("pse:count");
+        if (v.isEmpty()) {
+            v = link.getAttributeNS(PSE_NS, "count");
+        }
+        try {
+            return Integer.parseInt(v.trim());
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     // Atom 常见无前缀, 个别 feed 会带 (如 atom:entry), 统一取冒号后的本名

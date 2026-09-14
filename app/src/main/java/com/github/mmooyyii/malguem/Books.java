@@ -25,8 +25,26 @@ public final class Books {
         return name;
     }
 
-    // 优先用 SQLite 里的索引 0 往返开书
+    // 优先用 SQLite 里的索引 0 往返开书.
+    // OPDS 漫画是例外: 服务端给了页流就走页流, 按页取图比把整本拖下来随机读快几个数量级
+    // (Komga 的下载端点压根不认 Range, 详见 OpdsBook 的注释)
     static Book open(String namespace, String uri, ResourceInterface client, Database.DatabaseHelper db) throws Exception {
+        if (client instanceof OpdsResource) {
+            try {
+                var stream = ((OpdsResource) client).streamOf(uri);
+                if (stream != null) {
+                    return new OpdsBook(stream, (OpdsResource) client);
+                }
+            } catch (Exception ignore) {
+                // 目录查不动就按老路开整本, 真是网络断了下面那步会抛出真正的原因
+            }
+        }
+        return openText(namespace, uri, client, db);
+    }
+
+    // 小说模式专用: 必须拿到真正的 epub 文字流, 不能用 OPDS 页流顶替 —— 那边给的是图片,
+    // 字号/夜间/重排/章内进度全都无从谈起. 服务端也只对图片型漫画给页流, 两边本来就不重合
+    static Book openText(String namespace, String uri, ResourceInterface client, Database.DatabaseHelper db) throws Exception {
         return isCbz(uri)
                 ? LazyCbz.open(namespace, uri, client, db)
                 : LazyEpub.open(namespace, uri, client, db);
