@@ -42,6 +42,7 @@ public class FileListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
     private final List<ListItem> items = new ArrayList<>();
     private ResourceInterface client;
     private String namespace = "";
+    private List<String> pwd = new ArrayList<>();
     private OnItemAction action;
 
     public FileListAdapter(Context context) {
@@ -56,6 +57,12 @@ public class FileListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
     public void setClient(ResourceInterface client) {
         this.client = client;
         this.namespace = client == null ? "" : client.to_json();
+    }
+
+    // 目录封面要按 "当前路径 + 目录名" 去 ls, 所以 adapter 得知道自己正列在哪一层.
+    // 存快照: pwd 在 MainActivity 那边是可变的, 进出目录会就地改
+    public void setPwd(List<String> path) {
+        this.pwd = path == null ? new ArrayList<>() : new ArrayList<>(path);
     }
 
     public void setItems(List<ListItem> list) {
@@ -145,6 +152,13 @@ public class FileListAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolde
                 h.coverIcon.setImageResource(R.drawable.ic_folder);
                 h.coverIcon.setVisibility(View.VISIBLE);
                 h.caption.setText(display);
+                // 目录里第一本书的封面盖在图标上面 (coverImage 在 FrameLayout 最上层),
+                // 挖不出封面就还是这个文件夹图标
+                if (client != null) {
+                    var sub = new ArrayList<>(pwd);
+                    sub.add(item.name);
+                    coverLoader.loadDir(namespace, item.id, sub, client, h.coverImage);
+                }
                 break;
             case Resource:
                 h.cover.setBackgroundResource(R.drawable.cover_tile);

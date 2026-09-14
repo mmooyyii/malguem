@@ -829,6 +829,7 @@ public class MainActivity extends AppCompatActivity {
                 handler.post(() -> {
                     findViewById(R.id.listLoading).setVisibility(View.GONE);
                     fileListAdapter.setClient(client);
+                    fileListAdapter.setPwd(pwd);
                     fileListAdapter.setItems(finalFileList);
                     ensureListFocus();
                 });
