@@ -1,10 +1,15 @@
 package com.github.mmooyyii.malguem;
 
 import android.app.AlertDialog;
+import android.content.ComponentName;
+import android.content.ContentValues;
 import android.content.Intent;
 import android.net.Uri;
+import android.os.Build;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
+import android.provider.MediaStore;
 import android.provider.Settings;
 import android.widget.Toast;
 
@@ -16,6 +21,9 @@ import androidx.core.content.FileProvider;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
+import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.concurrent.TimeUnit;
 
 import okhttp3.OkHttpClient;
@@ -414,13 +422,16 @@ public class AppUpdater {
 
     private void install() {
         if (!activity.getPackageManager().canRequestPackageInstalls()) {
-            // 首次更新需要用户授权"安装未知应用", 授权页返回后由 unknownSourceLauncher 回调继续
+            // Android 8 起没有全局"未知来源"开关, 装 apk 的那个应用本身必须被授权"安装未知应用", 绕不过去.
+            // 不想给本应用授权的话, 只能借一个已有授权的应用来装: 当初把 malguem 装上电视的文件管理器
+            // 必然有这个授权, 把包交给它就行. 授权页返回后由 unknownSourceLauncher 回调继续
             new AlertDialog.Builder(activity)
                     .setTitle(R.string.install_perm_title)
                     .setMessage(R.string.install_perm_msg)
                     .setPositiveButton(R.string.grant, (d, w) -> unknownSourceLauncher.launch(
                             new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
                                     Uri.parse("package:" + activity.getPackageName()))))
+                    .setNeutralButton(R.string.install_by_other, (d, w) -> handOff())
                     .setNegativeButton(R.string.cancel, (d, w) -> d.dismiss())
                     .show();
             return;
@@ -429,11 +440,98 @@ public class AppUpdater {
     }
 
     private void launchInstaller() {
+        activity.startActivity(apkIntent(Intent.ACTION_VIEW));
+    }
+
+    private Intent apkIntent(String action) {
         var uri = FileProvider.getUriForFile(activity,
                 activity.getPackageName() + ".fileprovider", apkFile);
-        var intent = new Intent(Intent.ACTION_VIEW)
+        return new Intent(action)
                 .setDataAndType(uri, "application/vnd.android.package-archive")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        activity.startActivity(intent);
+    }
+
+    // 不给本应用授权: 包另存一份到文件管理器看得到的地方, 再列出能打开 apk 的其他应用 (排除系统安装器 ——
+    // 从本应用直接拉起它, 记账的安装来源还是本应用, 照样要授权). 选中的文件管理器自己去调安装器, 用的是它的授权
+    private void handOff() {
+        String saved;
+        try {
+            saved = exportApk();
+        } catch (Exception e) {
+            saved = null;
+        }
+        var view = apkIntent(Intent.ACTION_VIEW);
+        var pm = activity.getPackageManager();
+        var installers = new HashSet<String>();
+        for (var r : pm.queryIntentActivities(apkIntent(Intent.ACTION_INSTALL_PACKAGE), 0)) {
+            installers.add(r.activityInfo.packageName);
+        }
+        var exclude = new ArrayList<ComponentName>();
+        boolean hasOther = false;
+        for (var r : pm.queryIntentActivities(view, 0)) {
+            if (installers.contains(r.activityInfo.packageName)) {
+                exclude.add(new ComponentName(r.activityInfo.packageName, r.activityInfo.name));
+            } else {
+                hasOther = true;
+            }
+        }
+        var msg = saved == null
+                ? activity.getString(R.string.install_by_other_nosave)
+                : activity.getString(R.string.install_by_other_msg, saved);
+        var builder = new AlertDialog.Builder(activity)
+                .setTitle(R.string.install_by_other)
+                .setMessage(msg)
+                .setNegativeButton(R.string.cancel, (d, w) -> d.dismiss());
+        if (hasOther) {
+            builder.setPositiveButton(R.string.install_pick_app, (d, w) -> {
+                var chooser = Intent.createChooser(view, activity.getString(R.string.install_pick_app));
+                chooser.putExtra(Intent.EXTRA_EXCLUDE_COMPONENTS, exclude.toArray(new ComponentName[0]));
+                activity.startActivity(chooser);
+            });
+        }
+        builder.show();
+    }
+
+    // 另存到文件管理器能浏览的位置, 返回给用户看的路径. 都不需要存储权限:
+    // 10+ 走 MediaStore 写公共 Download; 8/9 写本应用的外部私有目录, 那时 Android/data 还没被封, 文件管理器进得去
+    private String exportApk() throws Exception {
+        var name = apkFile.getName();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            var values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, name);
+            values.put(MediaStore.MediaColumns.MIME_TYPE, "application/vnd.android.package-archive");
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS);
+            var resolver = activity.getContentResolver();
+            var uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) {
+                throw new IllegalStateException("MediaStore insert failed");
+            }
+            try (var out = resolver.openOutputStream(uri)) {
+                copyApk(out);
+            }
+            return Environment.DIRECTORY_DOWNLOADS + "/" + name;
+        }
+        var dir = activity.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS);
+        if (dir == null) {
+            throw new IllegalStateException("external storage unavailable");
+        }
+        var out = new File(dir, name);
+        try (var os = new FileOutputStream(out)) {
+            copyApk(os);
+        }
+        return out.getAbsolutePath();
+    }
+
+    private void copyApk(OutputStream out) throws Exception {
+        if (out == null) {
+            throw new IllegalStateException("no output stream");
+        }
+        try (var in = new FileInputStream(apkFile)) {
+            var buf = new byte[64 * 1024];
+            int n;
+            while ((n = in.read(buf)) != -1) {
+                out.write(buf, 0, n);
+            }
+        }
     }
 }

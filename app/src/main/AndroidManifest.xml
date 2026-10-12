@@ -13,6 +13,18 @@
     <!-- 应用内 OTA 更新: 拉起系统安装器装新版 apk -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
+    <!-- "用其他应用安装": 要看得到哪些应用能打开 apk, 并认出系统安装器把它排除掉 (targetSdk 30+ 的包可见性) -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.INSTALL_PACKAGE" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+    </queries>
+
     <uses-feature
         android:name="android.hardware.touchscreen"
         android:required="false" />

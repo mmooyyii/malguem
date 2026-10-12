@@ -139,7 +139,11 @@
     <string name="downloading">Downloading %1$s</string>
     <string name="picking_source">Picking the fastest source…</string>
     <string name="install_perm_title">Install permission required</string>
-    <string name="install_perm_msg">First update needs permission to install unknown apps. Installation continues automatically after granting.</string>
+    <string name="install_perm_msg">Android only lets an app install APKs after it is allowed to install unknown apps. Grant it to this app (installation then continues automatically), or hand the APK to a file manager that already has it (e.g. the one you used to install malguem).</string>
+    <string name="install_by_other">Install with another app</string>
+    <string name="install_by_other_msg">The APK was saved to %1$s. Pick an app below to open it, or find the file in your file manager and install it.</string>
+    <string name="install_by_other_nosave">Could not save a copy of the APK. Pick an app below to open it.</string>
+    <string name="install_pick_app">Choose app</string>
     <string name="grant">Grant</string>
 
     <!-- 分类后的报错提示 -->
