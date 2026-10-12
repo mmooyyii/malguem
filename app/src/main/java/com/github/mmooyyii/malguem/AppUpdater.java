@@ -10,11 +10,8 @@ import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.MediaStore;
-import android.provider.Settings;
 import android.widget.Toast;
 
-import androidx.activity.result.ActivityResultLauncher;
-import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.FileProvider;
 
@@ -61,8 +58,9 @@ public class AppUpdater {
             .readTimeout(20, TimeUnit.SECONDS)
             .build();
     private final Handler main = new Handler(Looper.getMainLooper());
-    private final ActivityResultLauncher<Intent> unknownSourceLauncher;
     private File apkFile; // 已下载待安装的 apk
+    // 用户在询问框里选了"用其他应用安装": 下完不拉系统安装器, 改为交给别的应用
+    private boolean handOffAfterDownload;
     // 检查阶段验证过可用的源, 下载从它开始试; 检查与下载在不同线程, 要 volatile 保证可见
     private volatile int goodSource = 0;
 
@@ -93,17 +91,8 @@ public class AppUpdater {
         return s.length() > 40 ? s.substring(0, 40) + "…" : s;
     }
 
-    // 必须在 Activity onCreate 期间构造 (registerForActivityResult 的限制)
     public AppUpdater(AppCompatActivity activity) {
         this.activity = activity;
-        // 从"安装未知应用"授权页返回后, 若已授权则继续安装刚下载好的 apk
-        unknownSourceLauncher = activity.registerForActivityResult(
-                new ActivityResultContracts.StartActivityForResult(),
-                result -> {
-                    if (apkFile != null && activity.getPackageManager().canRequestPackageInstalls()) {
-                        launchInstaller();
-                    }
-                });
     }
 
     // 手动检查 (首页按钮/帮助对话框): 无论结果如何都给出反馈; 不做任何隐式自动检查
@@ -220,7 +209,14 @@ public class AppUpdater {
         new AlertDialog.Builder(activity)
                 .setTitle(activity.getString(R.string.new_version, latest))
                 .setMessage(activity.getString(R.string.update_ask, current))
-                .setPositiveButton(R.string.update_now, (d, w) -> download(latest))
+                .setPositiveButton(R.string.update_now, (d, w) -> {
+                    handOffAfterDownload = false;
+                    download(latest);
+                })
+                .setNeutralButton(R.string.install_by_other, (d, w) -> {
+                    handOffAfterDownload = true;
+                    download(latest);
+                })
                 .setNegativeButton(R.string.update_later, (d, w) -> d.dismiss())
                 .show();
     }
@@ -389,7 +385,11 @@ public class AppUpdater {
                     return;
                 }
                 dialog.dismiss();
-                install();
+                if (handOffAfterDownload) {
+                    handOff();
+                } else {
+                    launchInstaller();
+                }
             });
         }
     }
@@ -420,27 +420,16 @@ public class AppUpdater {
         }
     }
 
-    private void install() {
-        if (!activity.getPackageManager().canRequestPackageInstalls()) {
-            // Android 8 起没有全局"未知来源"开关, 装 apk 的那个应用本身必须被授权"安装未知应用", 绕不过去.
-            // 不想给本应用授权的话, 只能借一个已有授权的应用来装: 当初把 malguem 装上电视的文件管理器
-            // 必然有这个授权, 把包交给它就行. 授权页返回后由 unknownSourceLauncher 回调继续
-            new AlertDialog.Builder(activity)
-                    .setTitle(R.string.install_perm_title)
-                    .setMessage(R.string.install_perm_msg)
-                    .setPositiveButton(R.string.grant, (d, w) -> unknownSourceLauncher.launch(
-                            new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                                    Uri.parse("package:" + activity.getPackageName()))))
-                    .setNeutralButton(R.string.install_by_other, (d, w) -> handOff())
-                    .setNegativeButton(R.string.cancel, (d, w) -> d.dismiss())
-                    .show();
-            return;
-        }
-        launchInstaller();
-    }
-
+    // 不预先查 canRequestPackageInstalls, 直接拉系统安装器: 没授权时安装器自己会弹提示,
+    // 弹窗里点"设置"打开开关、返回后接着装, 比先弹我们自己的对话框再跳授权页顺 (bv 就是这么做的).
+    // 授权躲不掉 —— Android 8 起装 apk 的应用本身必须被允许"安装未知应用"; 不想给本应用授权的,
+    // 在询问框里选"用其他应用安装", 借当初装 malguem 的那个文件管理器的授权
     private void launchInstaller() {
-        activity.startActivity(apkIntent(Intent.ACTION_VIEW));
+        try {
+            activity.startActivity(apkIntent(Intent.ACTION_VIEW));
+        } catch (android.content.ActivityNotFoundException e) {
+            handOff(); // 阉割过的 ROM 可能连安装器都拉不起来, 至少把包存出来
+        }
     }
 
     private Intent apkIntent(String action) {

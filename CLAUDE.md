@@ -45,6 +45,9 @@ JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gra
   装完 versionCode 没变", 用户看到的就是"apk 有但升级失败" (v1.11.0→v1.11.2 实打实踩到).
   版本对不上就抛异常换下一个源. 另外 CI 里 purge jsDelivr 要先 sleep 再打: 刚 push 完 GitHub raw
   未必同步好, 这时 purge 触发回源拿到的还是旧内容, 等于把旧版又缓存一轮
+- 安装不预查 `canRequestPackageInstalls`, 下完直接拉系统安装器, 没授权由它自己弹提示 (同 bv). 授权本身绕不过去
+  (Android 8+ 装 apk 的应用必须被允许"安装未知应用"); 询问框的"用其他应用安装"把包存进 Download 并交给
+  别的应用 (选择器里排除系统安装器 —— 经选择器拉起它, 来源仍记在本应用), 借文件管理器的授权来装
 - OTA 覆盖安装要求签名一致: 电视上必须装 CI 签名的包, 本地 debug 包装不上去
 
 ## 架构速记

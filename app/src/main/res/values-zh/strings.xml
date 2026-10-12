@@ -125,13 +125,10 @@
     <string name="update_later">下次再说</string>
     <string name="downloading">正在下载 %1$s</string>
     <string name="picking_source">正在挑选最快的下载源…</string>
-    <string name="install_perm_title">需要安装权限</string>
-    <string name="install_perm_msg">Android 要求装 apk 的应用必须有"安装未知应用"授权. 可以给本应用授权 (之后自动继续安装), 也可以交给已有授权的文件管理器 (比如当初装 malguem 用的那个) 来装</string>
     <string name="install_by_other">用其他应用安装</string>
     <string name="install_by_other_msg">安装包已存到 %1$s. 可以在下面选一个应用直接打开它, 或者自己用文件管理器找到这个文件安装</string>
     <string name="install_by_other_nosave">安装包没能另存出来, 可以在下面选一个应用直接打开它</string>
     <string name="install_pick_app">选择应用</string>
-    <string name="grant">去授权</string>
 
     <string name="err_network">连不上服务器, 请检查网络与数据源地址</string>
     <string name="err_auth">认证失败, 请检查用户名和密码</string>
