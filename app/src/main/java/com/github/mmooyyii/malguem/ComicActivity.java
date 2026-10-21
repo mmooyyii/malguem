@@ -208,15 +208,17 @@ public class ComicActivity extends AppCompatActivity {
         pageView.setVisibility(layout.hidePage ? View.GONE : View.VISIBLE);
     }
 
-    // 按布局配置注入样式: 背景色所有模式都注入 (盖过书内白底); 适应整页时加视口与尺寸约束把图片限制在一屏内
+    // 按布局配置注入样式: 背景色所有模式都注入 (盖过书内白底); 适应宽度把图片拉满屏宽, 适应整页把图片限制在一屏内
     private String decorate(String html) {
         String bg = layout.bg == 2 ? "#000000" : layout.bg == 1 ? "#1e1e1e" : "#f5f0e6";
         var head = new StringBuilder();
-        if (layout.fit == 1) {
-            head.append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>");
-        }
+        // 两种适配都按设备宽度排版; 不加视口的话 WebView 按 980px 宽的虚拟视口缩放, 窄图铺不满屏
+        head.append("<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"/>");
         head.append("<style>html,body{background:").append(bg).append(" !important}");
-        if (layout.fit == 1) {
+        if (layout.fit == 0) {
+            head.append("img,image{display:block;width:100% !important;height:auto !important;max-width:none !important;max-height:none !important}")
+                    .append("svg{width:100% !important;height:auto !important}");
+        } else {
             head.append("body{margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh}")
                     .append("img,image{max-width:100% !important;max-height:100vh !important;width:auto !important;height:auto !important}")
                     .append("svg{width:100% !important;height:100vh !important}");

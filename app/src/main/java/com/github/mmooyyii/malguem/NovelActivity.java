@@ -316,16 +316,11 @@ public class NovelActivity extends AppCompatActivity {
             showReaderMenu();
             return true;
         }
-        // 上下键: 翻页模式下没有纵向滚动可言 (每列正好一屏高), 改成跳章;
+        // 上下键: 翻页模式下和左右键一样翻页 (下=后一页, 上=前一页);
         // 退回滚动模式时仍是原来的短按滚一屏 / 长按巡航
-        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_DPAD_UP) {
+        boolean vertical = keyCode == KeyEvent.KEYCODE_DPAD_DOWN || keyCode == KeyEvent.KEYCODE_DPAD_UP;
+        if (vertical && pagerPages <= 0) {
             int dir = keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : -1;
-            if (pagerPages > 0) {
-                if (action == KeyEvent.ACTION_DOWN && event.getRepeatCount() == 0) {
-                    changeChapter(dir);
-                }
-                return true;
-            }
             if (action == KeyEvent.ACTION_DOWN) {
                 if (event.getRepeatCount() == 0) {
                     scroller.pageScroll(dir);
@@ -337,10 +332,12 @@ public class NovelActivity extends AppCompatActivity {
             }
             return true;
         }
-        // 左右键: 翻页模式翻章内的页, 翻到头自动跨到相邻章; 否则直接翻章
-        if (action == KeyEvent.ACTION_DOWN
-                && (keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT)) {
-            int dir = keyCode == KeyEvent.KEYCODE_DPAD_RIGHT ? 1 : -1;
+        // 左右键 (及翻页模式下的上下键): 翻章内的页, 翻到头自动跨到相邻章; 不在翻页模式时直接翻章
+        if (vertical || keyCode == KeyEvent.KEYCODE_DPAD_LEFT || keyCode == KeyEvent.KEYCODE_DPAD_RIGHT) {
+            if (action != KeyEvent.ACTION_DOWN) {
+                return true;
+            }
+            int dir = keyCode == KeyEvent.KEYCODE_DPAD_RIGHT || keyCode == KeyEvent.KEYCODE_DPAD_DOWN ? 1 : -1;
             if (pagerPages > 0) {
                 int next = pagerPage + dir;
                 if (next >= 0 && next < pagerPages) {

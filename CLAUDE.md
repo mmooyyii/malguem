@@ -11,9 +11,10 @@ Android TV 上看 epub 漫画/小说的阅读器, 所有操作可用遥控器完
 本机默认 JDK 是 Java 8, 构建必须显式指定环境变量:
 
 ```bash
-JAVA_HOME=/opt/homebrew/opt/openjdk ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :app:assembleDebug
+JAVA_HOME=/opt/homebrew/opt/openjdk@21 ANDROID_HOME=$HOME/Library/Android/sdk ./gradlew :app:assembleDebug
 ```
 
+- 必须用 openjdk@21: brew 的 `openjdk` 已升到 27, 当前 Gradle 不认 (报错只有一行 "27")
 - Android SDK 装在 `~/Library/Android/sdk` (cmdline-tools + platform-35 + build-tools;35.0.0)
 - 验证方式: 编译通过 + 真机 (没有单测框架)
 
