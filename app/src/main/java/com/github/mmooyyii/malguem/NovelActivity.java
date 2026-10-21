@@ -8,6 +8,7 @@ import android.os.Looper;
 import android.util.Pair;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
+import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -59,7 +60,8 @@ public class NovelActivity extends AppCompatActivity {
                     // 而翻页正是用 transform 把这些列平移进视口 —— 移过来的是已被裁掉的区域, 于是第一页
                     // 正常、往后每页全白. 在 Chrome 上复现并确认过 (同 Blink 内核)
                     + "d.style.overflow='hidden';"
-                    + "b.style.transform='translateX(0)';b.style.transition='none';"
+                    // 单独成合成层: 翻页只是移动图层, 不用每次重新栅格化整个 body
+                    + "b.style.willChange='transform';b.style.transform='translateX(0)';b.style.transition='none';"
                     + "window.__step=colW+gap;"
                     // 末列不带 gap, 补一个再除, 否则最后一页会被算漏
                     + "return Math.max(1,Math.round((b.scrollWidth+gap)/window.__step));"
@@ -67,10 +69,13 @@ public class NovelActivity extends AppCompatActivity {
 
     // 用 transform 平移而不是 scrollLeft: 根元素设了 overflow:hidden 后, 有的 WebView 会无视
     // scrollLeft; transform 是纯变换, 不依赖滚动容器. body 的左 padding 一起平移, 每翻一屏
-    // 正好让下一列的左边缘落到原来 padding 的位置, 留白保持一致
+    // 正好让下一列的左边缘落到原来 padding 的位置, 留白保持一致.
+    // %2$s 是过渡: 按键翻页带一段短滑动, 加载后恢复位置时用 none 直接到位
     private static final String PAGER_GO =
-            "(function(){try{document.body.style.transform='translateX('+(-(%1$d*(window.__step||0)))+'px)';"
+            "(function(){try{var b=document.body;b.style.transition='%2$s';"
+                    + "b.style.transform='translateX('+(-(%1$d*(window.__step||0)))+'px)';"
                     + "return 1}catch(e){return 0}})()";
+    private static final String PAGER_SLIDE = "transform 180ms ease-out";
     Book epub_book;
     int epub_book_page;
     int resource_id;
@@ -176,7 +181,7 @@ public class NovelActivity extends AppCompatActivity {
             if (pagerPages > 0) {
                 int target = pagerPages <= 1 ? 0
                         : (int) Math.round((double) offset * (pagerPages - 1) / 10000.0);
-                gotoPagerPage(target);
+                gotoPagerPage(target, false);
             } else {
                 // 分页没生效: 退回滚动, 按万分比换算成像素 (老逻辑)
                 @SuppressWarnings("deprecation")
@@ -184,12 +189,25 @@ public class NovelActivity extends AppCompatActivity {
                 novelView.scrollTo(0, (int) ((long) offset * max / 10000));
                 updateProgressLabel();
             }
+            reveal();
         });
     }
 
-    private void gotoPagerPage(int n) {
+    // 换章加载时先把 WebView 藏起来: 新章会先按普通竖排画出来, 再被 JS 改成多列并跳到目标页,
+    // 直接显示就会看到排版闪一下. 等分页后的那一帧确实上屏了再露出来
+    private void reveal() {
+        novelView.postVisualStateCallback(0, new WebView.VisualStateCallback() {
+            @Override
+            public void onComplete(long requestId) {
+                novelView.setAlpha(1f);
+            }
+        });
+    }
+
+    private void gotoPagerPage(int n, boolean animate) {
         pagerPage = Math.max(0, Math.min(Math.max(0, pagerPages - 1), n));
-        novelView.evaluateJavascript(String.format(java.util.Locale.US, PAGER_GO, pagerPage), null);
+        novelView.evaluateJavascript(String.format(java.util.Locale.US, PAGER_GO, pagerPage,
+                animate ? PAGER_SLIDE : "none"), null);
         updateProgressLabel();
     }
 
@@ -254,9 +272,12 @@ public class NovelActivity extends AppCompatActivity {
         }
     }
 
-    // WebView 自身背景也变深色, 避免翻页/加载间隙白屏闪一下
+    // WebView 自身背景也变深色, 避免翻页/加载间隙白屏闪一下;
+    // 外层同色, 换章时 WebView 暂时透明, 露出来的底色不能不一样
     private void applyBackground() {
-        novelView.setBackgroundColor(dark ? 0xFF121212 : 0xFFFFFFFF);
+        int bg = dark ? 0xFF121212 : 0xFFFFFFFF;
+        novelView.setBackgroundColor(bg);
+        ((View) novelView.getParent()).setBackgroundColor(bg);
     }
 
     // 注入样式到 </head> 前 (没有 head 就拼在最前面): 图片尺寸约束 + 夜间色.
@@ -299,6 +320,7 @@ public class NovelActivity extends AppCompatActivity {
                 setupPager(page_offset);
             }
         });
+        novelView.setAlpha(0f);
         novelView.loadDataWithBaseURL("file:///android_asset/", html, "text/html", "UTF-8", null);
     }
 
@@ -341,7 +363,7 @@ public class NovelActivity extends AppCompatActivity {
             if (pagerPages > 0) {
                 int next = pagerPage + dir;
                 if (next >= 0 && next < pagerPages) {
-                    gotoPagerPage(next);
+                    gotoPagerPage(next, true);
                     return true;
                 }
             }
