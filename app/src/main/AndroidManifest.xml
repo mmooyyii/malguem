@@ -43,7 +43,7 @@
         tools:targetApi="m">
         <activity
             android:name=".MainActivity"
-            android:banner="@drawable/malguem"
+            android:banner="@drawable/banner"
             android:exported="true"
 
             android:icon="@drawable/malguem"
