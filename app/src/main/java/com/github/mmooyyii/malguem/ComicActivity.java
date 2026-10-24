@@ -205,7 +205,7 @@ public class ComicActivity extends AppCompatActivity {
         ComicViewRight.setBackgroundColor(bg);
         // 遮罩必须和背景同色, 不然揭开那一下会看见色块
         pageMask.setBackgroundColor(bg);
-        pageView.setVisibility(layout.hidePage ? View.GONE : View.VISIBLE);
+        pageView.setVisibility(layout.showPage ? View.VISIBLE : View.GONE);
     }
 
     // 按布局配置注入样式: 背景色所有模式都注入 (盖过书内白底); 适应宽度把图片拉满屏宽, 适应整页把图片限制在一屏内
@@ -394,7 +394,7 @@ public class ComicActivity extends AppCompatActivity {
                 getString(R.string.layout_bg, getString(layout.bg == 2 ? R.string.bg_black
                         : layout.bg == 1 ? R.string.bg_gray : R.string.bg_paper)),
                 getString(R.string.layout_shift, getString(layout.shift ? R.string.on : R.string.off)),
-                getString(R.string.layout_page_num, getString(layout.hidePage ? R.string.off : R.string.on)),
+                getString(R.string.layout_page_num, getString(layout.showPage ? R.string.on : R.string.off)),
         };
         new AlertDialog.Builder(this)
                 .setTitle(R.string.menu_layout)
@@ -408,7 +408,7 @@ public class ComicActivity extends AppCompatActivity {
                     } else if (which == 3) {
                         layout.shift = !layout.shift;
                     } else {
-                        layout.hidePage = !layout.hidePage;
+                        layout.showPage = !layout.showPage;
                     }
                     var db = Database.getInstance(this).getDatabase();
                     db.set_layout(resource_id, book_uri, layout.to_json());

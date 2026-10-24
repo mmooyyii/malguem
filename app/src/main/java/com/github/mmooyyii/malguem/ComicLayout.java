@@ -9,7 +9,7 @@ public class ComicLayout {
     int margin = 1;           // 边距: 0=贴合 1=标准 2=宽松
     int bg = 0;               // 背景: 0=纸白 1=深灰 2=纯黑
     boolean shift = false;    // 对页错位修正: 第 1 页单独成屏, 配对从第 2 页开始
-    boolean hidePage = false; // 隐藏页码指示
+    boolean showPage = false; // 显示页码指示, 默认隐藏 (旧版存的 hidePage key 不再认, 已读过的书也统一变成隐藏)
 
     static ComicLayout from_json(String json) {
         if (json == null || json.isEmpty()) {
