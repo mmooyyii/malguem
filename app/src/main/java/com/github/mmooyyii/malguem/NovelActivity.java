@@ -81,6 +81,7 @@ public class NovelActivity extends AppCompatActivity {
     int resource_id;
     String book_uri;
     boolean dark; // 夜间模式, 全局设置
+    boolean showPage; // 右下角页码/百分比, 全局设置, 默认隐藏 (会挡住末行正文, issue #1)
 
     // 注入的夜间样式: 全部 !important, 不管 epub 自带 css 在前在后都能盖住; 图片稍调暗
     private static final String DARK_CSS = "<style>"
@@ -116,6 +117,8 @@ public class NovelActivity extends AppCompatActivity {
         webSettings.setJavaScriptEnabled(true);
         webSettings.setTextZoom(getSharedPreferences("settings", MODE_PRIVATE).getInt("novel_text_zoom", 100));
         dark = getSharedPreferences("settings", MODE_PRIVATE).getBoolean("novel_dark", false);
+        showPage = getSharedPreferences("settings", MODE_PRIVATE).getBoolean("novel_show_page", false);
+        pageView.setVisibility(showPage ? View.VISIBLE : View.GONE);
         applyBackground();
         novelView.setOverScrollMode(WebView.OVER_SCROLL_NEVER);
 
@@ -399,6 +402,7 @@ public class NovelActivity extends AppCompatActivity {
                 getString(R.string.menu_jump),
                 getString(R.string.menu_zoom),
                 getString(R.string.menu_dark, getString(dark ? R.string.on : R.string.off)),
+                getString(R.string.layout_page_num, getString(showPage ? R.string.on : R.string.off)),
                 getString(R.string.menu_to_comic),
         };
         new AlertDialog.Builder(this)
@@ -415,6 +419,10 @@ public class NovelActivity extends AppCompatActivity {
                         applyBackground();
                         // 重新渲染当前页并按比例回到原位置
                         notifyPageChanged(currentRatio());
+                    } else if (which == 4) {
+                        showPage = !showPage;
+                        getSharedPreferences("settings", MODE_PRIVATE).edit().putBoolean("novel_show_page", showPage).apply();
+                        pageView.setVisibility(showPage ? View.VISIBLE : View.GONE);
                     } else {
                         switchToComic();
                     }
